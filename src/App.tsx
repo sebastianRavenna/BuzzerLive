@@ -3,6 +3,7 @@ import { Layout } from './components/common/Layout';
 import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
 import { PartidosPage } from './pages/PartidosPage';
+import { PartidoLivePage } from './pages/PartidoLivePage';
 
 function App() {
   return (
@@ -12,10 +13,9 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="posiciones" element={<PosicionesPage />} />
           <Route path="partidos" element={<PartidosPage />} />
-          {/* TODO: Add more routes */}
-          {/* <Route path="partido/:id" element={<MarcadorPage />} /> */}
-          {/* <Route path="partido/:id/live" element={<PartidoLivePage />} /> */}
         </Route>
+        {/* Pantalla de carga en vivo - sin Layout (fullscreen) */}
+        <Route path="/partido/:id/live" element={<PartidoLivePage />} />
       </Routes>
     </BrowserRouter>
   );
