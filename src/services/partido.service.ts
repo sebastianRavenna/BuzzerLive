@@ -110,8 +110,14 @@ export async function registrarAccion(
   equipoId: string,
   jugadorId: string | null,
   tipo: TipoAccion,
-  cuarto: number
+  cuarto: number,
+  esDescuento: boolean = false
 ) {
+  // Si es descuento, usamos una lógica diferente (actualización directa)
+  if (esDescuento) {
+    return await descontarAccion(partidoId, equipoId, jugadorId, tipo, cuarto);
+  }
+  
   const { data, error } = await supabase.rpc('registrar_accion', {
     p_partido_id: partidoId,
     p_equipo_id: equipoId,
@@ -124,6 +130,88 @@ export async function registrarAccion(
 
   if (error) throw error;
   return data;
+}
+
+// Descontar una acción (restar punto o falta)
+async function descontarAccion(
+  partidoId: string,
+  equipoId: string,
+  jugadorId: string | null,
+  tipo: TipoAccion,
+  cuarto: number
+) {
+  // Obtener partido actual
+  const { data: partido, error: errorPartido } = await supabase
+    .from('partidos')
+    .select('*')
+    .eq('id', partidoId)
+    .single();
+  
+  if (errorPartido) throw errorPartido;
+  
+  const esLocal = equipoId === partido.equipo_local_id;
+  
+  // Calcular valor a descontar
+  let valorPunto = 0;
+  let valorFalta = 0;
+  
+  if (tipo === 'PUNTO_1') valorPunto = 1;
+  else if (tipo === 'PUNTO_2') valorPunto = 2;
+  else if (tipo === 'PUNTO_3') valorPunto = 3;
+  else if (tipo === 'FALTA_PERSONAL') valorFalta = 1;
+  
+  // Actualizar partido
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  
+  if (valorPunto > 0) {
+    if (esLocal) {
+      updates.puntos_local = Math.max(0, partido.puntos_local - valorPunto);
+    } else {
+      updates.puntos_visitante = Math.max(0, partido.puntos_visitante - valorPunto);
+    }
+  }
+  
+  if (valorFalta > 0) {
+    const faltasKey = esLocal ? 'faltas_equipo_local' : 'faltas_equipo_visitante';
+    const faltasActuales = [...(partido[faltasKey] || [0, 0, 0, 0, 0, 0])];
+    const idx = Math.max(0, cuarto - 1);
+    faltasActuales[idx] = Math.max(0, (faltasActuales[idx] || 0) - 1);
+    updates[faltasKey] = faltasActuales;
+  }
+  
+  const { error: errorUpdate } = await supabase
+    .from('partidos')
+    .update(updates)
+    .eq('id', partidoId);
+  
+  if (errorUpdate) throw errorUpdate;
+  
+  // Actualizar participación del jugador si aplica
+  if (jugadorId && (valorPunto > 0 || valorFalta > 0)) {
+    const { data: participacion } = await supabase
+      .from('participaciones_partido')
+      .select('*')
+      .eq('partido_id', partidoId)
+      .eq('jugador_id', jugadorId)
+      .single();
+    
+    if (participacion) {
+      const updatesPart: Record<string, unknown> = {};
+      if (valorPunto > 0) {
+        updatesPart.puntos = Math.max(0, participacion.puntos - valorPunto);
+      }
+      if (valorFalta > 0) {
+        updatesPart.faltas = Math.max(0, participacion.faltas - 1);
+      }
+      
+      await supabase
+        .from('participaciones_partido')
+        .update(updatesPart)
+        .eq('id', participacion.id);
+    }
+  }
+  
+  return true;
 }
 
 // Anular última acción
@@ -142,6 +230,25 @@ export async function cambiarCuarto(partidoId: string, nuevoCuarto: number) {
     .from('partidos')
     .update({ 
       cuarto_actual: nuevoCuarto,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', partidoId);
+
+  if (error) throw error;
+}
+
+// Actualizar tiempos muertos
+export async function actualizarTiemposMuertos(
+  partidoId: string, 
+  esLocal: boolean, 
+  nuevoValor: number
+) {
+  const campo = esLocal ? 'tiempos_muertos_local' : 'tiempos_muertos_visitante';
+  
+  const { error } = await supabase
+    .from('partidos')
+    .update({ 
+      [campo]: nuevoValor,
       updated_at: new Date().toISOString()
     })
     .eq('id', partidoId);
