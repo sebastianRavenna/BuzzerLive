@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+/* Base styles */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Score display - using standard CSS since @apply with custom classes doesn't work in Tailwind 4 */
+.score-box {
+  font-size: 4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
+@media (min-width: 768px) {
+  .score-box {
+    font-size: 6rem;
+  }
+}
+
+/* Live indicator animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
