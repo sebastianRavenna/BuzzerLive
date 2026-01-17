@@ -862,10 +862,14 @@ function EquipoPanel({
           <button
             key={jugador.id}
             onClick={() => handleClickTitular(jugador)}
-            disabled={jugador.faltas >= 5 && !modoDescontar}
+            disabled={jugador.faltas >= 5 && !modoDescontar && !modoSustitucion}
             className={`p-2 rounded-lg border-2 transition-all text-center ${
               jugador.faltas >= 5
-                ? 'bg-red-900/30 border-red-800 opacity-50'
+                ? modoSustitucion
+                  ? jugadorSaliendo?.id === jugador.id
+                    ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
+                    : 'bg-red-900/50 border-red-600 hover:border-red-500'
+                  : 'bg-red-900/30 border-red-800 opacity-50'
                 : modoSustitucion && jugadorSaliendo?.id === jugador.id
                   ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
                   : modoSustitucion

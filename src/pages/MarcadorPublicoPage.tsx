@@ -106,32 +106,47 @@ export function MarcadorPublicoPage() {
   // Partido programado (aún no empezó)
   if (partido.estado === 'PROGRAMADO') {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-2xl p-8 max-w-lg w-full text-center">
-          <div className="text-gray-400 text-sm uppercase tracking-wider mb-4">Próximo partido</div>
-          
-          <div className="flex items-center justify-center gap-6 mb-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-white">
-                {equipoLocal.nombre_corto || equipoLocal.nombre}
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header con botón volver */}
+        <header className="p-4">
+          <Link 
+            to="/partidos" 
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a partidos
+          </Link>
+        </header>
+        
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-2xl p-8 max-w-lg w-full text-center">
+            <div className="text-gray-400 text-sm uppercase tracking-wider mb-4">Próximo partido</div>
+            
+            <div className="flex items-center justify-center gap-6 mb-6">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-white">
+                  {equipoLocal.nombre_corto || equipoLocal.nombre}
+                </div>
+              </div>
+              <div className="text-2xl text-gray-500">vs</div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-white">
+                  {equipoVisitante.nombre_corto || equipoVisitante.nombre}
+                </div>
               </div>
             </div>
-            <div className="text-2xl text-gray-500">vs</div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-white">
-                {equipoVisitante.nombre_corto || equipoVisitante.nombre}
-              </div>
+            
+            <div className="text-gray-400 space-y-1">
+              <div className="text-lg">{partido.fecha}</div>
+              <div className="text-2xl font-bold text-white">{partido.hora}</div>
+              <div>{partido.lugar}</div>
             </div>
-          </div>
-          
-          <div className="text-gray-400 space-y-1">
-            <div className="text-lg">{partido.fecha}</div>
-            <div className="text-2xl font-bold text-white">{partido.hora}</div>
-            <div>{partido.lugar}</div>
-          </div>
-          
-          <div className="mt-8 text-sm text-gray-500">
-            El marcador se actualizará automáticamente cuando comience el partido
+            
+            <div className="mt-8 text-sm text-gray-500">
+              El marcador se actualizará automáticamente cuando comience el partido
+            </div>
           </div>
         </div>
       </div>
@@ -144,53 +159,62 @@ export function MarcadorPublicoPage() {
     const empate = partido.puntos_local === partido.puntos_visitante;
     
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-2xl p-8 max-w-2xl w-full">
-          <div className="text-center mb-6">
-            <span className="inline-block px-4 py-1 bg-gray-700 text-gray-300 text-sm font-bold rounded-full">
-              FINALIZADO
-            </span>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            {/* Equipo Local */}
-            <div className={`flex-1 text-center ${ganoLocal && !empate ? 'opacity-100' : 'opacity-60'}`}>
-              <div className="text-lg text-gray-400 mb-2">
-                {equipoLocal.nombre_corto || equipoLocal.nombre}
-              </div>
-              <div className="text-7xl font-bold text-white">
-                {partido.puntos_local}
-              </div>
-              {ganoLocal && !empate && (
-                <div className="mt-2 text-green-500 font-bold">GANADOR</div>
-              )}
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header con botón volver */}
+        <header className="p-4">
+          <Link 
+            to="/partidos" 
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a partidos
+          </Link>
+        </header>
+        
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-2xl p-8 max-w-2xl w-full">
+            <div className="text-center mb-6">
+              <span className="inline-block px-4 py-1 bg-gray-700 text-gray-300 text-sm font-bold rounded-full">
+                FINALIZADO
+              </span>
             </div>
             
-            {/* Separador */}
-            <div className="px-8 text-4xl text-gray-600">-</div>
-            
-            {/* Equipo Visitante */}
-            <div className={`flex-1 text-center ${!ganoLocal && !empate ? 'opacity-100' : 'opacity-60'}`}>
-              <div className="text-lg text-gray-400 mb-2">
-                {equipoVisitante.nombre_corto || equipoVisitante.nombre}
+            <div className="flex items-center justify-between">
+              {/* Equipo Local */}
+              <div className={`flex-1 text-center ${ganoLocal && !empate ? 'opacity-100' : 'opacity-60'}`}>
+                <div className="text-lg text-gray-400 mb-2">
+                  {equipoLocal.nombre_corto || equipoLocal.nombre}
+                </div>
+                <div className="text-7xl font-bold text-white">
+                  {partido.puntos_local}
+                </div>
+                {ganoLocal && !empate && (
+                  <div className="mt-2 text-green-500 font-bold">GANADOR</div>
+                )}
               </div>
-              <div className="text-7xl font-bold text-white">
-                {partido.puntos_visitante}
+              
+              {/* Separador */}
+              <div className="px-8 text-4xl text-gray-600">-</div>
+              
+              {/* Equipo Visitante */}
+              <div className={`flex-1 text-center ${!ganoLocal && !empate ? 'opacity-100' : 'opacity-60'}`}>
+                <div className="text-lg text-gray-400 mb-2">
+                  {equipoVisitante.nombre_corto || equipoVisitante.nombre}
+                </div>
+                <div className="text-7xl font-bold text-white">
+                  {partido.puntos_visitante}
+                </div>
+                {!ganoLocal && !empate && (
+                  <div className="mt-2 text-green-500 font-bold">GANADOR</div>
+                )}
               </div>
-              {!ganoLocal && !empate && (
-                <div className="mt-2 text-green-500 font-bold">GANADOR</div>
-              )}
             </div>
-          </div>
-          
-          <div className="mt-8 text-center text-gray-500">
-            {partido.lugar} • {partido.fecha}
-          </div>
-          
-          <div className="mt-6 text-center">
-            <Link to="/partidos" className="text-blue-400 hover:text-blue-300">
-              ← Ver todos los partidos
-            </Link>
+            
+            <div className="mt-8 text-center text-gray-500">
+              {partido.lugar} • {partido.fecha}
+            </div>
           </div>
         </div>
       </div>
@@ -208,11 +232,24 @@ export function MarcadorPublicoPage() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-800 p-4 text-center">
+      <header className="bg-gray-800 p-4 flex items-center justify-between">
+        <Link 
+          to="/partidos" 
+          className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span className="hidden sm:inline">Volver</span>
+        </Link>
+        
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-full">
           <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
           EN VIVO
         </div>
+        
+        {/* Spacer para centrar el badge */}
+        <div className="w-16"></div>
       </header>
       
       {/* Marcador principal */}

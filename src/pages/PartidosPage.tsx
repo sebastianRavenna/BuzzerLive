@@ -1,15 +1,36 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import type { MarcadorPartido } from '../types';
 
+type FiltroPartido = 'todos' | 'en_curso' | 'programados' | 'finalizados';
+
 export function PartidosPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [partidos, setPartidos] = useState<MarcadorPartido[]>([]);
-  const [filtro, setFiltro] = useState<'todos' | 'en_curso' | 'programados' | 'finalizados'>('todos');
+  
+  // Leer filtro inicial del URL o usar 'todos'
+  const estadoParam = searchParams.get('estado');
+  const filtroInicial: FiltroPartido = 
+    estadoParam === 'en_curso' || estadoParam === 'programados' || estadoParam === 'finalizados' 
+      ? estadoParam 
+      : 'todos';
+  
+  const [filtro, setFiltro] = useState<FiltroPartido>(filtroInicial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const configured = isSupabaseConfigured();
+
+  // Actualizar URL cuando cambia el filtro
+  const handleFiltroChange = (nuevoFiltro: FiltroPartido) => {
+    setFiltro(nuevoFiltro);
+    if (nuevoFiltro === 'todos') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ estado: nuevoFiltro });
+    }
+  };
   
   useEffect(() => {
     if (!configured) {
@@ -100,7 +121,7 @@ export function PartidosPage() {
           {(['todos', 'en_curso', 'programados', 'finalizados'] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFiltro(f)}
+              onClick={() => handleFiltroChange(f)}
               className={`
                 px-4 py-2 rounded-lg text-sm font-medium transition-colors
                 ${filtro === f 

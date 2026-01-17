@@ -115,21 +115,38 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     };
   }, [partidoId]);
 
-  const formatTipo = (tipo: string): string => {
+  const formatTipo = (tipo: string, valor: number): string => {
+    // Si valor es negativo, es un descuento
+    if (valor < 0) {
+      switch (tipo) {
+        case 'PUNTO_1': return '−1';
+        case 'PUNTO_2': return '−2';
+        case 'PUNTO_3': return '−3';
+        case 'FALTA_PERSONAL': return '−FALTA';
+        default: return `−${tipo}`;
+      }
+    }
+    
     switch (tipo) {
       case 'PUNTO_1': return '+1';
       case 'PUNTO_2': return '+2';
       case 'PUNTO_3': return '+3';
       case 'FALTA_PERSONAL': return 'FALTA';
       case 'TIEMPO_MUERTO': return 'TIEMPO';
+      case 'FIN_CUARTO': return 'FIN CUARTO';
+      case 'INICIO_CUARTO': return 'INICIO';
       default: return tipo;
     }
   };
 
-  const getColorClase = (tipo: string): string => {
+  const getColorClase = (tipo: string, valor: number): string => {
+    // Descuentos en naranja
+    if (valor < 0) return 'text-orange-400';
+    
     if (tipo.startsWith('PUNTO')) return 'text-green-400';
     if (tipo === 'FALTA_PERSONAL') return 'text-red-400';
     if (tipo === 'TIEMPO_MUERTO') return 'text-purple-400';
+    if (tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO') return 'text-blue-400';
     return 'text-gray-400';
   };
 
@@ -169,8 +186,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
                 #{accion.jugador_numero} {accion.jugador_apellido}
               </span>
             )}
-            <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo)}`}>
-              {formatTipo(accion.tipo)}
+            <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo, accion.valor)}`}>
+              {formatTipo(accion.tipo, accion.valor)}
             </span>
           </div>
         ))}
