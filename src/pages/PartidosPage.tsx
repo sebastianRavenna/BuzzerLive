@@ -20,8 +20,7 @@ export function PartidosPage() {
     async function fetchPartidos() {
       let query = supabase
         .from('marcador_partido')
-        .select('*')
-        .order('fecha', { ascending: false });
+        .select('*');
       
       if (filtro === 'en_curso') {
         query = query.eq('estado', 'EN_CURSO');
@@ -31,12 +30,43 @@ export function PartidosPage() {
         query = query.eq('estado', 'FINALIZADO');
       }
       
-      const { data, error } = await query.limit(20);
+      const { data, error } = await query.limit(50);
       
       if (error) {
         setError(error.message);
       } else if (data) {
-        setPartidos(data);
+        // Ordenar partidos: EN_CURSO primero, luego PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
+        const ordenados = [...data].sort((a, b) => {
+          // Prioridad por estado
+          const prioridad: Record<string, number> = {
+            'EN_CURSO': 0,
+            'PROGRAMADO': 1,
+            'FINALIZADO': 2,
+            'SUSPENDIDO': 3,
+            'POSTERGADO': 4
+          };
+          
+          const prioridadA = prioridad[a.estado] ?? 5;
+          const prioridadB = prioridad[b.estado] ?? 5;
+          
+          if (prioridadA !== prioridadB) {
+            return prioridadA - prioridadB;
+          }
+          
+          // Dentro del mismo estado, ordenar por fecha
+          const fechaA = new Date(a.fecha).getTime();
+          const fechaB = new Date(b.fecha).getTime();
+          
+          if (a.estado === 'PROGRAMADO') {
+            // Programados: más próximo primero (fecha ascendente)
+            return fechaA - fechaB;
+          } else {
+            // Finalizados y en curso: más reciente primero (fecha descendente)
+            return fechaB - fechaA;
+          }
+        });
+        
+        setPartidos(ordenados);
       }
       setLoading(false);
     }
@@ -128,7 +158,15 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
   const esFinalizado = partido.estado === 'FINALIZADO';
   
   return (
-    <div className={`card ${esEnVivo ? 'ring-2 ring-red-500' : ''}`}>
+    <div className={`
+      bg-white rounded-xl shadow-md p-4 border-2
+      ${esEnVivo 
+        ? 'border-red-500 bg-red-50/30' 
+        : esFinalizado 
+          ? 'border-gray-300 bg-gray-50/50' 
+          : 'border-blue-200 bg-blue-50/20'
+      }
+    `}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-gray-500">

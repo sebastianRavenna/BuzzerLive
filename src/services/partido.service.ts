@@ -61,6 +61,7 @@ export async function getPartidoCompleto(partidoId: string) {
       puntos: participacion?.puntos || 0,
       faltas: participacion?.faltas || 0,
       participo: participacion?.participo || false,
+      es_titular: participacion?.es_titular || false,
     };
   };
 

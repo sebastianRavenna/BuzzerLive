@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#111827"/>
+  
+  <!-- Basketball -->
+  <circle cx="256" cy="256" r="160" fill="#f97316" stroke="#ea580c" stroke-width="8"/>
+  
+  <!-- Basketball lines -->
+  <path d="M96 256 h320" stroke="#111827" stroke-width="8" fill="none"/>
+  <path d="M256 96 v320" stroke="#111827" stroke-width="8" fill="none"/>
+  
+  <!-- Curved lines -->
+  <path d="M176 96 Q96 256 176 416" stroke="#111827" stroke-width="8" fill="none"/>
+  <path d="M336 96 Q416 256 336 416" stroke="#111827" stroke-width="8" fill="none"/>
+  
+  <!-- Live indicator -->
+  <circle cx="400" cy="112" r="40" fill="#dc2626"/>
+  <circle cx="400" cy="112" r="20" fill="#fff"/>
+</svg>
