@@ -9,6 +9,14 @@ import {
   suscribirseAPartido,
   actualizarTiemposMuertos
 } from '../services/partido.service';
+import {
+  isOnline,
+  onConnectionChange,
+  addToOfflineQueue,
+  getOfflineQueue,
+  syncOfflineQueue
+} from '../services/offlineQueue';
+import { LogAcciones } from '../components/common/LogAcciones';
 import type { 
   Partido, 
   Equipo, 
@@ -43,6 +51,11 @@ export function PartidoLivePage() {
   const [mostrarConfirmacionFin, setMostrarConfirmacionFin] = useState(false);
   const [ultimos2MinLocal, setUltimos2MinLocal] = useState(false);
   const [ultimos2MinVisitante, setUltimos2MinVisitante] = useState(false);
+  
+  // Estado de conexión y cola offline
+  const [online, setOnline] = useState(isOnline());
+  const [pendientes, setPendientes] = useState(getOfflineQueue().length);
+  const [sincronizando, setSincronizando] = useState(false);
 
   // Cargar datos del partido
   useEffect(() => {
@@ -60,11 +73,33 @@ export function PartidoLivePage() {
         if (data.partido.estado === 'PROGRAMADO') {
           setFase('seleccion-titulares');
         } else if (data.partido.estado === 'EN_CURSO') {
-          // Recuperar titulares si ya está en curso
-          const titularesL = new Set(data.jugadoresLocal.filter(j => j.participo).map(j => j.id));
-          const titularesV = new Set(data.jugadoresVisitante.filter(j => j.participo).map(j => j.id));
-          setTitularesLocal(titularesL.size > 0 ? titularesL : new Set(data.jugadoresLocal.slice(0, 5).map(j => j.id)));
-          setTitularesVisitante(titularesV.size > 0 ? titularesV : new Set(data.jugadoresVisitante.slice(0, 5).map(j => j.id)));
+          // Recuperar titulares usando es_titular de la BD
+          // Si no hay marcados como titular, usar los que participaron
+          // Si aún así no hay 5, completar con los primeros de la lista
+          const obtenerTitulares = (jugadores: JugadorEnPartido[]) => {
+            // Primero, intentar con es_titular
+            const titulares = jugadores.filter(j => j.es_titular);
+            if (titulares.length === 5) {
+              return new Set(titulares.map(j => j.id));
+            }
+            
+            // Si no hay titulares marcados, usar los que participaron
+            const participaron = jugadores.filter(j => j.participo);
+            if (participaron.length >= 5) {
+              return new Set(participaron.slice(0, 5).map(j => j.id));
+            }
+            
+            // Si no hay suficientes que participaron, completar con los primeros
+            const ids = new Set(participaron.map(j => j.id));
+            for (const j of jugadores) {
+              if (ids.size >= 5) break;
+              ids.add(j.id);
+            }
+            return ids;
+          };
+          
+          setTitularesLocal(obtenerTitulares(data.jugadoresLocal));
+          setTitularesVisitante(obtenerTitulares(data.jugadoresVisitante));
           setFase('en-juego');
         } else {
           setFase('finalizado');
@@ -87,6 +122,43 @@ export function PartidoLivePage() {
 
     return unsubscribe;
   }, [id]);
+
+  // Detectar cambios de conexión
+  useEffect(() => {
+    const unsubscribe = onConnectionChange((isOnlineNow) => {
+      setOnline(isOnlineNow);
+      
+      // Sincronizar cuando vuelve la conexión
+      if (isOnlineNow && getOfflineQueue().length > 0) {
+        handleSyncOffline();
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Sincronizar cola offline
+  const handleSyncOffline = async () => {
+    if (sincronizando) return;
+    
+    setSincronizando(true);
+    try {
+      const result = await syncOfflineQueue();
+      setPendientes(getOfflineQueue().length);
+      
+      if (result.success > 0 && id) {
+        // Recargar datos del partido después de sincronizar
+        const data = await getPartidoCompleto(id);
+        setPartido(data.partido);
+        setJugadoresLocal(data.jugadoresLocal);
+        setJugadoresVisitante(data.jugadoresVisitante);
+      }
+    } catch (err) {
+      console.error('Error sincronizando:', err);
+    } finally {
+      setSincronizando(false);
+    }
+  };
 
   // Calcular tiempos muertos disponibles
   const getTiemposDisponibles = (esLocal: boolean) => {
@@ -169,31 +241,47 @@ export function PartidoLivePage() {
     const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     if (!equipoId) return;
 
+    // Validar que el jugador tenga suficientes puntos para descontar
+    if (modoDescontar && jugador.puntos < valor) {
+      setError(`${jugador.apellido} no tiene ${valor} puntos para descontar`);
+      setTimeout(() => setError(null), 2000);
+      return;
+    }
+
+    const valorReal = modoDescontar ? -valor : valor;
+    const tipo: TipoAccion = valor === 1 ? 'PUNTO_1' : valor === 2 ? 'PUNTO_2' : 'PUNTO_3';
+
+    // Actualizar UI optimista inmediatamente
+    const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
+      jugadores.map(j => 
+        j.id === jugador.id ? { ...j, puntos: Math.max(0, j.puntos + valorReal), participo: true } : j
+      );
+    
+    if (esLocal) {
+      setPartido(prev => prev ? { ...prev, puntos_local: Math.max(0, prev.puntos_local + valorReal) } : null);
+      setJugadoresLocal(actualizarJugadores);
+    } else {
+      setPartido(prev => prev ? { ...prev, puntos_visitante: Math.max(0, prev.puntos_visitante + valorReal) } : null);
+      setJugadoresVisitante(actualizarJugadores);
+    }
+    
+    if (modoDescontar) setModoDescontar(false);
+
+    // Si está offline, guardar en cola
+    if (!online) {
+      addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
+      setPendientes(getOfflineQueue().length);
+      return;
+    }
+
+    // Si está online, enviar al servidor
     setProcesando(true);
     try {
-      const valorReal = modoDescontar ? -valor : valor;
-      const tipo: TipoAccion = valor === 1 ? 'PUNTO_1' : valor === 2 ? 'PUNTO_2' : 'PUNTO_3';
-      
       await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
-      
-      // Actualizar UI
-      const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
-        jugadores.map(j => 
-          j.id === jugador.id ? { ...j, puntos: Math.max(0, j.puntos + valorReal), participo: true } : j
-        );
-      
-      if (esLocal) {
-        setPartido(prev => prev ? { ...prev, puntos_local: Math.max(0, prev.puntos_local + valorReal) } : null);
-        setJugadoresLocal(actualizarJugadores);
-      } else {
-        setPartido(prev => prev ? { ...prev, puntos_visitante: Math.max(0, prev.puntos_visitante + valorReal) } : null);
-        setJugadoresVisitante(actualizarJugadores);
-      }
-      
-      // Desactivar modo descontar después de usar
-      if (modoDescontar) setModoDescontar(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al registrar punto');
+      // Si falla, agregar a la cola offline
+      addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
+      setPendientes(getOfflineQueue().length);
     } finally {
       setProcesando(false);
     }
@@ -207,43 +295,51 @@ export function PartidoLivePage() {
     const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     if (!equipoId) return;
 
+    const delta = modoDescontar ? -1 : 1;
+    
+    // Actualizar UI optimista inmediatamente
+    const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
+      jugadores.map(j => 
+        j.id === jugador.id ? { ...j, faltas: Math.max(0, j.faltas + delta), participo: true } : j
+      );
+    
+    const actualizarFaltasEquipo = (faltas: number[]) => {
+      const nuevasFaltas = [...faltas];
+      const idx = Math.max(0, partido.cuarto_actual - 1);
+      nuevasFaltas[idx] = Math.max(0, (nuevasFaltas[idx] || 0) + delta);
+      return nuevasFaltas;
+    };
+
+    if (esLocal) {
+      setJugadoresLocal(actualizarJugadores);
+      setPartido(prev => prev ? { 
+        ...prev, 
+        faltas_equipo_local: actualizarFaltasEquipo(prev.faltas_equipo_local) 
+      } : null);
+    } else {
+      setJugadoresVisitante(actualizarJugadores);
+      setPartido(prev => prev ? { 
+        ...prev, 
+        faltas_equipo_visitante: actualizarFaltasEquipo(prev.faltas_equipo_visitante) 
+      } : null);
+    }
+    
+    if (modoDescontar) setModoDescontar(false);
+
+    // Si está offline, guardar en cola
+    if (!online) {
+      addToOfflineQueue(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
+      setPendientes(getOfflineQueue().length);
+      return;
+    }
+
+    // Si está online, enviar al servidor
     setProcesando(true);
     try {
       await registrarAccion(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
-      
-      const delta = modoDescontar ? -1 : 1;
-      
-      // Actualizar jugador
-      const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
-        jugadores.map(j => 
-          j.id === jugador.id ? { ...j, faltas: Math.max(0, j.faltas + delta), participo: true } : j
-        );
-      
-      // Actualizar faltas de equipo
-      const actualizarFaltasEquipo = (faltas: number[]) => {
-        const nuevasFaltas = [...faltas];
-        const idx = Math.max(0, partido.cuarto_actual - 1);
-        nuevasFaltas[idx] = Math.max(0, (nuevasFaltas[idx] || 0) + delta);
-        return nuevasFaltas;
-      };
-
-      if (esLocal) {
-        setJugadoresLocal(actualizarJugadores);
-        setPartido(prev => prev ? { 
-          ...prev, 
-          faltas_equipo_local: actualizarFaltasEquipo(prev.faltas_equipo_local) 
-        } : null);
-      } else {
-        setJugadoresVisitante(actualizarJugadores);
-        setPartido(prev => prev ? { 
-          ...prev, 
-          faltas_equipo_visitante: actualizarFaltasEquipo(prev.faltas_equipo_visitante) 
-        } : null);
-      }
-      
-      if (modoDescontar) setModoDescontar(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al registrar falta');
+      addToOfflineQueue(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
+      setPendientes(getOfflineQueue().length);
     } finally {
       setProcesando(false);
     }
@@ -346,9 +442,21 @@ export function PartidoLivePage() {
     }
   };
 
+  // Verificar si el partido está empatado
+  const estaEmpatado = partido?.puntos_local === partido?.puntos_visitante;
+
   // Finalizar partido
   const handleFinalizarPartido = async () => {
-    if (!id) return;
+    if (!id || !partido) return;
+    
+    // No permitir finalizar si está empatado
+    if (estaEmpatado) {
+      setError('No se puede finalizar un partido empatado. Debe jugarse overtime.');
+      setMostrarConfirmacionFin(false);
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
     setProcesando(true);
     try {
       await finalizarPartido(id);
@@ -495,6 +603,23 @@ export function PartidoLivePage() {
         FINALIZAR
       </button>
       
+      {/* Indicador de conexión */}
+      {(!online || pendientes > 0) && (
+        <div className={`px-4 py-2 text-center text-sm font-medium ${
+          online ? 'bg-yellow-600' : 'bg-red-600'
+        } text-white`}>
+          {!online ? (
+            <span>⚠ Sin conexión - Las acciones se guardarán localmente</span>
+          ) : sincronizando ? (
+            <span>🔄 Sincronizando {pendientes} acciones pendientes...</span>
+          ) : (
+            <button onClick={handleSyncOffline} className="underline">
+              📤 {pendientes} acciones pendientes - Toca para sincronizar
+            </button>
+          )}
+        </div>
+      )}
+      
       {/* Header con marcador */}
       <header className="bg-gray-800 p-3">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
@@ -599,6 +724,15 @@ export function PartidoLivePage() {
             {modoDescontar ? '✓ MODO DESCONTAR ACTIVO' : 'DESCONTAR'}
           </button>
         </div>
+        
+        {/* Log de últimas acciones */}
+        <div className="mt-6">
+          <LogAcciones 
+            partidoId={id!} 
+            equipoLocalId={equipoLocal.id} 
+            compact={true} 
+          />
+        </div>
       </main>
 
       {/* Modal confirmación finalizar */}
@@ -606,23 +740,32 @@ export function PartidoLivePage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center">
             <h2 className="text-xl font-bold text-white mb-4">¿Finalizar partido?</h2>
-            <p className="text-gray-400 mb-6">
+            <p className="text-gray-400 mb-4">
               {equipoLocal.nombre_corto} {partido.puntos_local} - {partido.puntos_visitante} {equipoVisitante.nombre_corto}
             </p>
+            {estaEmpatado && (
+              <div className="mb-4 p-3 bg-yellow-600/20 border border-yellow-600 rounded-lg">
+                <p className="text-yellow-400 text-sm font-medium">
+                  ⚠️ El partido está empatado. Debe jugarse overtime.
+                </p>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setMostrarConfirmacionFin(false)}
                 className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
               >
-                Cancelar
+                {estaEmpatado ? 'Continuar partido' : 'Cancelar'}
               </button>
-              <button
-                onClick={handleFinalizarPartido}
-                disabled={procesando}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl"
-              >
-                {procesando ? 'Finalizando...' : 'Sí, Finalizar'}
-              </button>
+              {!estaEmpatado && (
+                <button
+                  onClick={handleFinalizarPartido}
+                  disabled={procesando}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl"
+                >
+                  {procesando ? 'Finalizando...' : 'Sí, Finalizar'}
+                </button>
+              )}
             </div>
           </div>
         </div>

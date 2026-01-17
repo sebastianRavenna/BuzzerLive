@@ -179,6 +179,7 @@ export interface JugadorEnPartido extends Jugador {
   puntos: number;
   faltas: number;
   participo: boolean;
+  es_titular?: boolean;
 }
 
 // Para el selector de equipo activo

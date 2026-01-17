@@ -5,17 +5,16 @@ interface AccionLog {
   id: string;
   tipo: string;
   cuarto: number;
+  valor: number;
   equipo_nombre: string;
   jugador_numero: number | null;
   jugador_apellido: string | null;
-  puntos_local: number;
-  puntos_visitante: number;
   timestamp_local: string;
 }
 
 interface LogAccionesProps {
   partidoId: string;
-  equipoLocalId?: string; // Opcional, para futuro uso
+  equipoLocalId?: string;
   compact?: boolean;
 }
 
@@ -32,8 +31,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           id,
           tipo,
           cuarto,
-          puntos_local_despues,
-          puntos_visitante_despues,
+          valor,
           timestamp_local,
           equipo:equipos(nombre_corto),
           jugador:jugadores(numero_camiseta, apellido)
@@ -43,16 +41,21 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         .order('timestamp_local', { ascending: false })
         .limit(10);
 
-      if (!error && data) {
+      if (error) {
+        console.error('Error cargando acciones:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
         setAcciones(data.map(a => ({
           id: a.id,
           tipo: a.tipo,
           cuarto: a.cuarto,
+          valor: a.valor,
           equipo_nombre: (a.equipo as any)?.nombre_corto || 'Equipo',
           jugador_numero: (a.jugador as any)?.numero_camiseta || null,
           jugador_apellido: (a.jugador as any)?.apellido || null,
-          puntos_local: a.puntos_local_despues,
-          puntos_visitante: a.puntos_visitante_despues,
           timestamp_local: a.timestamp_local,
         })));
       }
@@ -65,7 +68,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   // Suscribirse a nuevas acciones en tiempo real
   useEffect(() => {
     const channel = supabase
-      .channel(`acciones-${partidoId}`)
+      .channel(`acciones-log-${partidoId}`)
       .on(
         'postgres_changes',
         {
@@ -81,8 +84,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               id,
               tipo,
               cuarto,
-              puntos_local_despues,
-              puntos_visitante_despues,
+              valor,
               timestamp_local,
               equipo:equipos(nombre_corto),
               jugador:jugadores(numero_camiseta, apellido)
@@ -95,11 +97,10 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               id: data.id,
               tipo: data.tipo,
               cuarto: data.cuarto,
+              valor: data.valor,
               equipo_nombre: (data.equipo as any)?.nombre_corto || 'Equipo',
               jugador_numero: (data.jugador as any)?.numero_camiseta || null,
               jugador_apellido: (data.jugador as any)?.apellido || null,
-              puntos_local: data.puntos_local_despues,
-              puntos_visitante: data.puntos_visitante_despues,
               timestamp_local: data.timestamp_local,
             };
             
@@ -155,24 +156,21 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           Últimas Acciones
         </h3>
       )}
-      <div className={`space-y-1 ${compact ? 'max-h-32' : 'max-h-48'} overflow-y-auto`}>
+      <div className={`space-y-1.5 ${compact ? 'max-h-32' : 'max-h-48'} overflow-y-auto`}>
         {acciones.map((accion) => (
           <div 
             key={accion.id} 
             className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'} text-gray-300`}
           >
-            <span className="text-gray-500 w-6">Q{accion.cuarto}</span>
-            <span className="text-gray-400">{accion.equipo_nombre}</span>
+            <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
+            <span className="text-gray-400 truncate">{accion.equipo_nombre}</span>
             {accion.jugador_numero && (
-              <span className="text-white font-medium">
+              <span className="text-white font-medium truncate">
                 #{accion.jugador_numero} {accion.jugador_apellido}
               </span>
             )}
-            <span className={`font-bold ${getColorClase(accion.tipo)}`}>
+            <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo)}`}>
               {formatTipo(accion.tipo)}
-            </span>
-            <span className="text-gray-500 ml-auto">
-              ({accion.puntos_local}-{accion.puntos_visitante})
             </span>
           </div>
         ))}
