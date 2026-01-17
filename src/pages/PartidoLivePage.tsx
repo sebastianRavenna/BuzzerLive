@@ -296,27 +296,38 @@ export function PartidoLivePage() {
       ? Math.max(1, partido.cuarto_actual - 1)
       : partido.cuarto_actual + 1;
     
-    // Resetear tiempos muertos al cambiar de tiempo
-    const cambioTiempo = (partido.cuarto_actual <= 2 && nuevoCuarto > 2) || 
-                         (partido.cuarto_actual > 2 && nuevoCuarto <= 2) ||
-                         (nuevoCuarto > 4);
+    // Detectar cambio de tiempo (1er tiempo -> 2do tiempo, o entrada a OT)
+    const entrandoA2doTiempo = partido.cuarto_actual === 2 && nuevoCuarto === 3;
+    const entrandoAOT = partido.cuarto_actual === 4 && nuevoCuarto === 5;
+    const nuevoOT = partido.cuarto_actual >= 5 && nuevoCuarto > partido.cuarto_actual;
+    
+    const resetearTiempos = (entrandoA2doTiempo || entrandoAOT || nuevoOT) && !modoDescontar;
     
     setProcesando(true);
     try {
+      // Actualizar cuarto en BD
       await cambiarCuarto(id, nuevoCuarto);
       
+      // Si hay que resetear tiempos, actualizar en BD también
+      if (resetearTiempos) {
+        await actualizarTiemposMuertos(id, true, 0);
+        await actualizarTiemposMuertos(id, false, 0);
+      }
+      
+      // Actualizar estado local
       setPartido(prev => {
         if (!prev) return null;
         const updates: Partial<Partido> = { cuarto_actual: nuevoCuarto };
-        if (cambioTiempo && !modoDescontar) {
+        if (resetearTiempos) {
           updates.tiempos_muertos_local = 0;
           updates.tiempos_muertos_visitante = 0;
         }
-        // Resetear regla 2 minutos al cambiar de cuarto
-        setUltimos2MinLocal(false);
-        setUltimos2MinVisitante(false);
         return { ...prev, ...updates };
       });
+      
+      // Resetear regla 2 minutos al cambiar de cuarto
+      setUltimos2MinLocal(false);
+      setUltimos2MinVisitante(false);
       
       if (modoDescontar) setModoDescontar(false);
     } catch (err) {
@@ -792,8 +803,8 @@ function EquipoPanel({
         </button>
       </div>
       
-      {/* Regla 2 minutos (solo Q3-Q4) */}
-      {cuartoActual >= 3 && cuartoActual <= 4 && !ultimos2MinActivo && tiemposUsados === 0 && (
+      {/* Regla 2 minutos (solo Q4) */}
+      {cuartoActual === 4 && !ultimos2MinActivo && tiemposUsados === 0 && (
         <button
           onClick={onUltimos2Min}
           className="w-full py-2 mb-3 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold rounded-lg"

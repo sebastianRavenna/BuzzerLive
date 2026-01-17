@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
 import { PartidosPage } from './pages/PartidosPage';
 import { PartidoLivePage } from './pages/PartidoLivePage';
+import { MarcadorPublicoPage } from './pages/MarcadorPublicoPage';
 
 function App() {
   return (
@@ -16,6 +17,8 @@ function App() {
         </Route>
         {/* Pantalla de carga en vivo - sin Layout (fullscreen) */}
         <Route path="/partido/:id/live" element={<PartidoLivePage />} />
+        {/* Vista pública del marcador - sin Layout (fullscreen) */}
+        <Route path="/partido/:id" element={<MarcadorPublicoPage />} />
       </Routes>
     </BrowserRouter>
   );
