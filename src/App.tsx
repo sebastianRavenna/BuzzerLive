@@ -5,6 +5,7 @@ import { PosicionesPage } from './pages/PosicionesPage';
 import { PartidosPage } from './pages/PartidosPage';
 import { PartidoLivePage } from './pages/PartidoLivePage';
 import { MarcadorPublicoPage } from './pages/MarcadorPublicoPage';
+import { InstallPWA } from './components/common/InstallPWA';
 
 function App() {
   return (
@@ -20,6 +21,9 @@ function App() {
         {/* Vista pública del marcador - sin Layout (fullscreen) */}
         <Route path="/partido/:id" element={<MarcadorPublicoPage />} />
       </Routes>
+      
+      {/* Banner de instalación PWA */}
+      <InstallPWA />
     </BrowserRouter>
   );
 }
