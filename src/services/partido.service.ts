@@ -53,13 +53,37 @@ export async function getPartidoCompleto(partidoId: string) {
     .select('*')
     .eq('partido_id', partidoId);
 
+  // Obtener acciones de faltas para contar técnicas y antideportivas
+  const { data: accionesFaltas } = await supabase
+    .from('acciones')
+    .select('jugador_id, tipo')
+    .eq('partido_id', partidoId)
+    .eq('anulada', false)
+    .in('tipo', ['FALTA_TECNICA', 'FALTA_ANTIDEPORTIVA', 'FALTA_DESCALIFICANTE']);
+
   // Mapear jugadores con sus estadísticas del partido
   const mapJugadorConStats = (jugador: Jugador): JugadorEnPartido => {
     const participacion = participaciones?.find(p => p.jugador_id === jugador.id);
+    
+    // Contar faltas por tipo
+    const faltasJugador = accionesFaltas?.filter(a => a.jugador_id === jugador.id) || [];
+    const faltas_tecnicas = faltasJugador.filter(a => a.tipo === 'FALTA_TECNICA').length;
+    const faltas_antideportivas = faltasJugador.filter(a => a.tipo === 'FALTA_ANTIDEPORTIVA').length;
+    const tiene_descalificante = faltasJugador.some(a => a.tipo === 'FALTA_DESCALIFICANTE');
+    
+    // Expulsado si: 2 técnicas, 2 antideportivas, 1T+1A, o 1 expulsión directa
+    const descalificado = tiene_descalificante || 
+                          faltas_tecnicas >= 2 || 
+                          faltas_antideportivas >= 2 ||
+                          (faltas_tecnicas >= 1 && faltas_antideportivas >= 1);
+    
     return {
       ...jugador,
       puntos: participacion?.puntos || 0,
       faltas: participacion?.faltas || 0,
+      faltas_tecnicas,
+      faltas_antideportivas,
+      descalificado,
       participo: participacion?.participo || false,
       es_titular: participacion?.es_titular || false,
     };
@@ -291,6 +315,20 @@ export async function suspenderPartido(partidoId: string, observaciones: string)
     .update({ 
       estado: 'SUSPENDIDO',
       observaciones: observaciones,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', partidoId);
+
+  if (error) throw error;
+}
+
+// Reanudar partido suspendido
+export async function reanudarPartido(partidoId: string) {
+  const { error } = await supabase
+    .from('partidos')
+    .update({ 
+      estado: 'EN_CURSO',
+      observaciones: null, // Limpiar observaciones de suspensión
       updated_at: new Date().toISOString()
     })
     .eq('id', partidoId);

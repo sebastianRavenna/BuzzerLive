@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { reanudarPartido } from '../services/partido.service';
 import type { MarcadorPartido } from '../types';
 
 type FiltroPartido = 'todos' | 'en_curso' | 'programados' | 'finalizados';
@@ -56,15 +57,15 @@ export function PartidosPage() {
       if (error) {
         setError(error.message);
       } else if (data) {
-        // Ordenar partidos: EN_CURSO primero, luego PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
+        // Ordenar partidos: EN_CURSO primero, luego SUSPENDIDOS/PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
         const ordenados = [...data].sort((a, b) => {
-          // Prioridad por estado
+          // Prioridad por estado: SUSPENDIDO se trata como PROGRAMADO
           const prioridad: Record<string, number> = {
             'EN_CURSO': 0,
+            'SUSPENDIDO': 1, // Junto con programados para que se vean
             'PROGRAMADO': 1,
             'FINALIZADO': 2,
-            'SUSPENDIDO': 3,
-            'POSTERGADO': 4
+            'POSTERGADO': 3
           };
           
           const prioridadA = prioridad[a.estado] ?? 5;
@@ -78,8 +79,8 @@ export function PartidosPage() {
           const fechaA = new Date(a.fecha).getTime();
           const fechaB = new Date(b.fecha).getTime();
           
-          if (a.estado === 'PROGRAMADO') {
-            // Programados: más próximo primero (fecha ascendente)
+          if (a.estado === 'PROGRAMADO' || a.estado === 'SUSPENDIDO') {
+            // Programados y suspendidos: más próximo primero (fecha ascendente)
             return fechaA - fechaB;
           } else {
             // Finalizados y en curso: más reciente primero (fecha descendente)
@@ -175,9 +176,26 @@ export function PartidosPage() {
 }
 
 function PartidoCard({ partido }: { partido: MarcadorPartido }) {
+  const navigate = useNavigate();
+  const [reanudando, setReanudando] = useState(false);
+  
   const esEnVivo = partido.estado === 'EN_CURSO';
   const esFinalizado = partido.estado === 'FINALIZADO';
   const esSuspendido = partido.estado === 'SUSPENDIDO';
+  const tieneMarcador = esEnVivo || esFinalizado || esSuspendido;
+
+  const handleReanudar = async () => {
+    if (reanudando) return;
+    setReanudando(true);
+    try {
+      await reanudarPartido(partido.partido_id);
+      // Redirigir al planillero para continuar
+      navigate(`/partido/${partido.partido_id}/live`);
+    } catch (err) {
+      console.error('Error al reanudar:', err);
+      setReanudando(false);
+    }
+  };
   
   return (
     <div className={`
@@ -223,7 +241,7 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
           <div className="text-lg font-bold text-gray-900">
             {partido.local_nombre_corto || partido.local_nombre}
           </div>
-          {(esEnVivo || esFinalizado) && (
+          {tieneMarcador && (
             <div className="text-4xl font-bold mt-2">
               {partido.puntos_local}
             </div>
@@ -239,6 +257,13 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
                 {partido.hora || 'Hora a confirmar'}
               </div>
             </div>
+          ) : esSuspendido ? (
+            <div>
+              <div className="text-2xl font-bold text-yellow-500">-</div>
+              <div className="text-xs text-yellow-600 mt-1">
+                Q{partido.cuarto_actual}
+              </div>
+            </div>
           ) : (
             <div className="text-2xl font-bold text-gray-400">-</div>
           )}
@@ -249,13 +274,21 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
           <div className="text-lg font-bold text-gray-900">
             {partido.visitante_nombre_corto || partido.visitante_nombre}
           </div>
-          {(esEnVivo || esFinalizado) && (
+          {tieneMarcador && (
             <div className="text-4xl font-bold mt-2">
               {partido.puntos_visitante}
             </div>
           )}
         </div>
       </div>
+
+      {/* Observaciones de suspensión */}
+      {esSuspendido && partido.observaciones && (
+        <div className="mt-3 p-3 bg-yellow-100 border border-yellow-300 rounded-lg">
+          <div className="text-xs text-yellow-700 font-medium mb-1">Motivo de suspensión:</div>
+          <div className="text-sm text-yellow-800">{partido.observaciones}</div>
+        </div>
+      )}
       
       {/* Info adicional */}
       <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
@@ -293,6 +326,23 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
             >
               Iniciar
             </Link>
+          )}
+          {esSuspendido && (
+            <>
+              <Link
+                to={`/partido/${partido.partido_id}`}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+              >
+                Ver
+              </Link>
+              <button
+                onClick={handleReanudar}
+                disabled={reanudando}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm font-medium hover:bg-yellow-700 disabled:bg-yellow-400"
+              >
+                {reanudando ? 'Reanudando...' : 'Reanudar'}
+              </button>
+            </>
           )}
           {esFinalizado && (
             <Link

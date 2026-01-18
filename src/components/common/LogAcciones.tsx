@@ -122,7 +122,10 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         case 'PUNTO_1': return '−1';
         case 'PUNTO_2': return '−2';
         case 'PUNTO_3': return '−3';
-        case 'FALTA_PERSONAL': return '−FALTA';
+        case 'FALTA_PERSONAL': return '−FP';
+        case 'FALTA_TECNICA': return '−FT';
+        case 'FALTA_ANTIDEPORTIVA': return '−FA';
+        case 'FALTA_DESCALIFICANTE': return '−EXP';
         default: return `−${tipo}`;
       }
     }
@@ -131,10 +134,13 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       case 'PUNTO_1': return '+1';
       case 'PUNTO_2': return '+2';
       case 'PUNTO_3': return '+3';
-      case 'FALTA_PERSONAL': return 'FALTA';
+      case 'FALTA_PERSONAL': return 'FP';
+      case 'FALTA_TECNICA': return 'FT';
+      case 'FALTA_ANTIDEPORTIVA': return 'FA';
+      case 'FALTA_DESCALIFICANTE': return 'EXPULSIÓN';
       case 'TIEMPO_MUERTO': return 'TIEMPO';
-      case 'FIN_CUARTO': return 'FIN CUARTO';
-      case 'INICIO_CUARTO': return 'INICIO';
+      case 'FIN_CUARTO': return `FIN Q${valor || ''}`;
+      case 'INICIO_CUARTO': return `INICIO Q${valor || ''}`;
       default: return tipo;
     }
   };
@@ -145,9 +151,17 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     
     if (tipo.startsWith('PUNTO')) return 'text-green-400';
     if (tipo === 'FALTA_PERSONAL') return 'text-red-400';
+    if (tipo === 'FALTA_TECNICA') return 'text-yellow-400';
+    if (tipo === 'FALTA_ANTIDEPORTIVA') return 'text-orange-500';
+    if (tipo === 'FALTA_DESCALIFICANTE') return 'text-red-600 font-bold';
     if (tipo === 'TIEMPO_MUERTO') return 'text-purple-400';
-    if (tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO') return 'text-blue-400';
+    if (tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO') return 'text-blue-400 font-bold';
     return 'text-gray-400';
+  };
+
+  // Determinar si la acción es de sistema (no tiene jugador)
+  const esAccionSistema = (tipo: string): boolean => {
+    return tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO';
   };
 
   if (loading) {
@@ -177,18 +191,30 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         {acciones.map((accion) => (
           <div 
             key={accion.id} 
-            className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'} text-gray-300`}
+            className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'} text-gray-300 ${
+              esAccionSistema(accion.tipo) ? 'bg-blue-900/30 rounded px-2 py-1 justify-center' : ''
+            }`}
           >
-            <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
-            <span className="text-gray-400 truncate">{accion.equipo_nombre}</span>
-            {accion.jugador_numero && (
-              <span className="text-white font-medium truncate">
-                #{accion.jugador_numero} {accion.jugador_apellido}
+            {esAccionSistema(accion.tipo) ? (
+              // Acciones de sistema (cambio de cuarto)
+              <span className={`font-bold ${getColorClase(accion.tipo, accion.valor)}`}>
+                {formatTipo(accion.tipo, accion.valor)}
               </span>
+            ) : (
+              // Acciones normales
+              <>
+                <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
+                <span className="text-gray-400 truncate">{accion.equipo_nombre}</span>
+                {accion.jugador_numero && (
+                  <span className="text-white font-medium truncate">
+                    #{accion.jugador_numero} {accion.jugador_apellido}
+                  </span>
+                )}
+                <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo, accion.valor)}`}>
+                  {formatTipo(accion.tipo, accion.valor)}
+                </span>
+              </>
             )}
-            <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo, accion.valor)}`}>
-              {formatTipo(accion.tipo, accion.valor)}
-            </span>
           </div>
         ))}
       </div>

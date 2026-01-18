@@ -18,6 +18,8 @@ export type TipoAccion =
   | 'INICIO_CUARTO'
   | 'FIN_CUARTO';
 
+export type TipoFalta = 'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE';
+
 // Base entity interface
 export interface BaseEntity {
   id: string;
@@ -147,6 +149,7 @@ export interface MarcadorPartido {
   fecha: string;
   hora?: string;
   lugar?: string;
+  observaciones?: string;
   
   local_id: string;
   local_nombre: string;
@@ -178,6 +181,9 @@ export interface MarcadorPartido {
 export interface JugadorEnPartido extends Jugador {
   puntos: number;
   faltas: number;
+  faltas_tecnicas: number;
+  faltas_antideportivas: number;
+  descalificado: boolean;
   participo: boolean;
   es_titular?: boolean;
 }

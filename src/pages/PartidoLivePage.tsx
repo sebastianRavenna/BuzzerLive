@@ -53,6 +53,23 @@ export function PartidoLivePage() {
   const [mostrarConfirmacionSalir, setMostrarConfirmacionSalir] = useState(false);
   const [mostrarSuspender, setMostrarSuspender] = useState(false);
   const [observacionesSuspension, setObservacionesSuspension] = useState('');
+  
+  // Modal de falta
+  const [mostrarModalFalta, setMostrarModalFalta] = useState(false);
+  const [faltaEsLocal, setFaltaEsLocal] = useState(true);
+  const [tipoFaltaSeleccionado, setTipoFaltaSeleccionado] = useState<'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE'>('FALTA_PERSONAL');
+  const [tirosLibres, setTirosLibres] = useState(0);
+  
+  // Modal de expulsión
+  const [mostrarExpulsion, setMostrarExpulsion] = useState(false);
+  const [jugadorExpulsado, setJugadorExpulsado] = useState<string>('');
+  
+  // Editar número de camiseta
+  const [mostrarEditarNumero, setMostrarEditarNumero] = useState(false);
+  const [jugadorEditando, setJugadorEditando] = useState<JugadorEnPartido | null>(null);
+  const [nuevoNumero, setNuevoNumero] = useState('');
+  const [esLocalEditando, setEsLocalEditando] = useState(true);
+  
   const [ultimos2MinLocal, setUltimos2MinLocal] = useState(false);
   const [ultimos2MinVisitante, setUltimos2MinVisitante] = useState(false);
   
@@ -199,6 +216,34 @@ export function PartidoLivePage() {
     setTitulares(nuevoSet);
   };
 
+  // Abrir modal para editar número de camiseta
+  const abrirEditarNumero = (jugador: JugadorEnPartido, esLocal: boolean) => {
+    setJugadorEditando(jugador);
+    setNuevoNumero(jugador.numero_camiseta.toString());
+    setEsLocalEditando(esLocal);
+    setMostrarEditarNumero(true);
+  };
+
+  // Guardar nuevo número de camiseta
+  const guardarNumero = () => {
+    if (!jugadorEditando || !nuevoNumero) return;
+    
+    const numero = parseInt(nuevoNumero);
+    if (isNaN(numero) || numero < 0 || numero > 99) {
+      setError('Número inválido (0-99)');
+      setTimeout(() => setError(null), 2000);
+      return;
+    }
+    
+    const setJugadores = esLocalEditando ? setJugadoresLocal : setJugadoresVisitante;
+    setJugadores(prev => prev.map(j => 
+      j.id === jugadorEditando.id ? { ...j, numero_camiseta: numero } : j
+    ));
+    
+    setMostrarEditarNumero(false);
+    setJugadorEditando(null);
+  };
+
   // Iniciar el partido
   const handleIniciarPartido = async () => {
     if (!id || titularesLocal.size !== 5 || titularesVisitante.size !== 5) {
@@ -291,34 +336,107 @@ export function PartidoLivePage() {
     }
   };
 
-  // Registrar falta
-  const handleFalta = async (esLocal: boolean) => {
+  // Abrir modal de falta
+  const handleFalta = (esLocal: boolean) => {
+    const jugador = esLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
+    if (!partido || !jugador) return;
+    
+    // Si está en modo descontar, verificar que tenga alguna falta
+    if (modoDescontar) {
+      const totalFaltas = jugador.faltas + jugador.faltas_tecnicas + jugador.faltas_antideportivas;
+      if (totalFaltas <= 0) {
+        setError(`${jugador.apellido} no tiene faltas para descontar`);
+        setTimeout(() => setError(null), 2000);
+        return;
+      }
+    }
+    
+    // Abrir modal para seleccionar tipo de falta
+    setFaltaEsLocal(esLocal);
+    setTipoFaltaSeleccionado('FALTA_PERSONAL');
+    setTirosLibres(0);
+    setMostrarModalFalta(true);
+  };
+
+  // Confirmar y registrar falta
+  const handleConfirmarFalta = async (
+    esLocal: boolean, 
+    tipoFalta: 'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE',
+    _tiros: number, // TODO: Guardar en DB en futuro
+    esDescuento: boolean = false
+  ) => {
     const jugador = esLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
     if (!id || !partido || !jugador) return;
     
     const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     if (!equipoId) return;
 
-    // Validar que el jugador tenga faltas para descontar
-    if (modoDescontar && jugador.faltas <= 0) {
-      setError(`${jugador.apellido} no tiene faltas para descontar`);
-      setTimeout(() => setError(null), 2000);
-      return;
-    }
+    // Obtener valores actuales del jugador desde el estado
+    const jugadores = esLocal ? jugadoresLocal : jugadoresVisitante;
+    const jugadorActual = jugadores.find(j => j.id === jugador.id);
+    if (!jugadorActual) return;
 
-    const delta = modoDescontar ? -1 : 1;
+    const delta = esDescuento ? -1 : 1;
+    
+    // Calcular nuevos valores
+    let nuevasFaltas = jugadorActual.faltas;
+    let nuevasFaltasTecnicas = jugadorActual.faltas_tecnicas;
+    let nuevasFaltasAntideportivas = jugadorActual.faltas_antideportivas;
+    let quedaExpulsado = jugadorActual.descalificado;
+    
+    if (esDescuento) {
+      // Descontar según tipo
+      if (tipoFalta === 'FALTA_PERSONAL') {
+        nuevasFaltas = Math.max(0, nuevasFaltas - 1);
+      } else if (tipoFalta === 'FALTA_TECNICA') {
+        nuevasFaltasTecnicas = Math.max(0, nuevasFaltasTecnicas - 1);
+      } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
+        nuevasFaltasAntideportivas = Math.max(0, nuevasFaltasAntideportivas - 1);
+      }
+    } else {
+      // Sumar falta
+      if (tipoFalta === 'FALTA_PERSONAL') {
+        nuevasFaltas += 1;
+      } else if (tipoFalta === 'FALTA_TECNICA') {
+        nuevasFaltasTecnicas += 1;
+      } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
+        nuevasFaltasAntideportivas += 1;
+      } else if (tipoFalta === 'FALTA_DESCALIFICANTE') {
+        quedaExpulsado = true;
+      }
+      
+      // Reglas de expulsión:
+      // - 2 técnicas
+      // - 2 antideportivas  
+      // - 1 técnica + 1 antideportiva
+      // - 1 expulsión directa
+      if (nuevasFaltasTecnicas >= 2 || 
+          nuevasFaltasAntideportivas >= 2 || 
+          (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1)) {
+        quedaExpulsado = true;
+      }
+    }
     
     // Actualizar UI optimista inmediatamente
-    const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
-      jugadores.map(j => 
-        j.id === jugador.id ? { ...j, faltas: Math.max(0, j.faltas + delta), participo: true } : j
+    const actualizarJugadores = (jugadoresArr: JugadorEnPartido[]) =>
+      jugadoresArr.map(j => 
+        j.id === jugador.id ? { 
+          ...j, 
+          faltas: nuevasFaltas,
+          faltas_tecnicas: nuevasFaltasTecnicas,
+          faltas_antideportivas: nuevasFaltasAntideportivas,
+          descalificado: quedaExpulsado,
+          participo: true 
+        } : j
       );
     
+    // Solo sumar falta de equipo para falta personal
     const actualizarFaltasEquipo = (faltas: number[]) => {
-      const nuevasFaltas = [...faltas];
+      if (tipoFalta !== 'FALTA_PERSONAL') return faltas;
+      const nuevasFaltasEquipo = [...faltas];
       const idx = Math.max(0, partido.cuarto_actual - 1);
-      nuevasFaltas[idx] = Math.max(0, (nuevasFaltas[idx] || 0) + delta);
-      return nuevasFaltas;
+      nuevasFaltasEquipo[idx] = Math.max(0, (nuevasFaltasEquipo[idx] || 0) + delta);
+      return nuevasFaltasEquipo;
     };
 
     if (esLocal) {
@@ -335,11 +453,18 @@ export function PartidoLivePage() {
       } : null);
     }
     
-    if (modoDescontar) setModoDescontar(false);
+    if (esDescuento) setModoDescontar(false);
+    setMostrarModalFalta(false);
 
-    // Si está offline, guardar en cola
+    // Mostrar modal si quedó expulsado
+    if (quedaExpulsado && !jugadorActual.descalificado && !esDescuento) {
+      setJugadorExpulsado(jugador.apellido);
+      setMostrarExpulsion(true);
+    }
+
+    // Si está offline, guardar en cola (incluir tiros en el futuro)
     if (!online) {
-      addToOfflineQueue(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
+      addToOfflineQueue(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
       setPendientes(getOfflineQueue().length);
       return;
     }
@@ -347,9 +472,9 @@ export function PartidoLivePage() {
     // Si está online, enviar al servidor
     setProcesando(true);
     try {
-      await registrarAccion(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
+      await registrarAccion(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
     } catch (err) {
-      addToOfflineQueue(id, equipoId, jugador.id, 'FALTA_PERSONAL', partido.cuarto_actual, modoDescontar);
+      addToOfflineQueue(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
       setPendientes(getOfflineQueue().length);
     } finally {
       setProcesando(false);
@@ -578,18 +703,32 @@ export function PartidoLivePage() {
             </h2>
             <div className="grid grid-cols-3 gap-2">
               {jugadoresLocal.map(jugador => (
-                <button
+                <div
                   key={jugador.id}
-                  onClick={() => toggleTitular(jugador.id, true)}
-                  className={`p-3 rounded-xl border-2 transition-all ${
+                  className={`p-3 rounded-xl border-2 transition-all relative ${
                     titularesLocal.has(jugador.id)
                       ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
                       : 'bg-gray-800 border-gray-600 hover:border-gray-500'
                   }`}
                 >
-                  <div className="text-2xl font-bold text-white">{jugador.numero_camiseta}</div>
-                  <div className="text-xs text-gray-400">{jugador.apellido}</div>
-                </button>
+                  <button
+                    onClick={() => toggleTitular(jugador.id, true)}
+                    className="w-full"
+                  >
+                    <div className="text-2xl font-bold text-white">{jugador.numero_camiseta}</div>
+                    <div className="text-xs text-gray-400">{jugador.apellido}</div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirEditarNumero(jugador, true);
+                    }}
+                    className="absolute top-1 right-1 w-5 h-5 bg-gray-700 hover:bg-gray-600 rounded text-gray-400 hover:text-white text-xs"
+                    title="Editar número"
+                  >
+                    ✎
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -602,18 +741,32 @@ export function PartidoLivePage() {
             </h2>
             <div className="grid grid-cols-3 gap-2">
               {jugadoresVisitante.map(jugador => (
-                <button
+                <div
                   key={jugador.id}
-                  onClick={() => toggleTitular(jugador.id, false)}
-                  className={`p-3 rounded-xl border-2 transition-all ${
+                  className={`p-3 rounded-xl border-2 transition-all relative ${
                     titularesVisitante.has(jugador.id)
                       ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
                       : 'bg-gray-800 border-gray-600 hover:border-gray-500'
                   }`}
                 >
-                  <div className="text-2xl font-bold text-white">{jugador.numero_camiseta}</div>
-                  <div className="text-xs text-gray-400">{jugador.apellido}</div>
-                </button>
+                  <button
+                    onClick={() => toggleTitular(jugador.id, false)}
+                    className="w-full"
+                  >
+                    <div className="text-2xl font-bold text-white">{jugador.numero_camiseta}</div>
+                    <div className="text-xs text-gray-400">{jugador.apellido}</div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirEditarNumero(jugador, false);
+                    }}
+                    className="absolute top-1 right-1 w-5 h-5 bg-gray-700 hover:bg-gray-600 rounded text-gray-400 hover:text-white text-xs"
+                    title="Editar número"
+                  >
+                    ✎
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -629,6 +782,42 @@ export function PartidoLivePage() {
             {procesando ? 'Iniciando...' : '▶ INICIAR PARTIDO'}
           </button>
         </div>
+        
+        {/* Modal editar número */}
+        {mostrarEditarNumero && jugadorEditando && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-2xl p-6 max-w-xs w-full text-center">
+              <h2 className="text-lg font-bold text-white mb-2">Editar Número</h2>
+              <p className="text-gray-400 mb-4 text-sm">{jugadorEditando.apellido}, {jugadorEditando.nombre}</p>
+              <input
+                type="number"
+                min="0"
+                max="99"
+                value={nuevoNumero}
+                onChange={(e) => setNuevoNumero(e.target.value)}
+                className="w-full p-4 bg-gray-700 border border-gray-600 rounded-xl text-white text-center text-3xl font-bold focus:outline-none focus:border-blue-500 mb-4"
+                autoFocus
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setMostrarEditarNumero(false);
+                    setJugadorEditando(null);
+                  }}
+                  className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={guardarNumero}
+                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -898,6 +1087,154 @@ export function PartidoLivePage() {
           </div>
         </div>
       )}
+
+      {/* Modal selección tipo de falta */}
+      {mostrarModalFalta && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold text-white mb-2 text-center">
+              {modoDescontar ? 'Descontar Falta' : 'Registrar Falta'}
+            </h2>
+            <p className="text-gray-400 mb-4 text-center text-sm">
+              #{faltaEsLocal ? jugadorSeleccionadoLocal?.numero_camiseta : jugadorSeleccionadoVisitante?.numero_camiseta}{' '}
+              {faltaEsLocal ? jugadorSeleccionadoLocal?.apellido : jugadorSeleccionadoVisitante?.apellido}
+            </p>
+            
+            {/* Tipo de falta */}
+            <div className="mb-4">
+              <label className="block text-gray-300 text-sm mb-2">Tipo de falta:</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { tipo: 'FALTA_PERSONAL', label: 'Personal', color: 'blue' },
+                  { tipo: 'FALTA_TECNICA', label: 'Técnica', color: 'yellow' },
+                  { tipo: 'FALTA_ANTIDEPORTIVA', label: 'Antideportiva', color: 'orange' },
+                  ...(!modoDescontar ? [{ tipo: 'FALTA_DESCALIFICANTE', label: 'Expulsión', color: 'red' }] : []),
+                ].map(({ tipo, label, color }) => {
+                  // En modo descontar, deshabilitar si no tiene ese tipo de falta
+                  const jugador = faltaEsLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
+                  let deshabilitado = false;
+                  if (modoDescontar && jugador) {
+                    if (tipo === 'FALTA_PERSONAL' && jugador.faltas <= 0) deshabilitado = true;
+                    if (tipo === 'FALTA_TECNICA' && jugador.faltas_tecnicas <= 0) deshabilitado = true;
+                    if (tipo === 'FALTA_ANTIDEPORTIVA' && jugador.faltas_antideportivas <= 0) deshabilitado = true;
+                  }
+                  
+                  return (
+                    <button
+                      key={tipo}
+                      onClick={() => setTipoFaltaSeleccionado(tipo as typeof tipoFaltaSeleccionado)}
+                      disabled={deshabilitado}
+                      className={`py-3 px-4 rounded-lg font-medium text-sm transition-all ${
+                        deshabilitado
+                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                          : tipoFaltaSeleccionado === tipo
+                            ? color === 'blue' ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                            : color === 'yellow' ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
+                            : color === 'orange' ? 'bg-orange-600 text-white ring-2 ring-orange-400'
+                            : 'bg-red-600 text-white ring-2 ring-red-400'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {label}
+                      {modoDescontar && jugador && (
+                        <span className="ml-1 text-xs opacity-70">
+                          ({tipo === 'FALTA_PERSONAL' ? jugador.faltas 
+                            : tipo === 'FALTA_TECNICA' ? jugador.faltas_tecnicas 
+                            : jugador.faltas_antideportivas})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Tiros libres - solo si no es descontar */}
+            {!modoDescontar && (
+              <div className="mb-6">
+                <label className="block text-gray-300 text-sm mb-2">Tiros libres:</label>
+                <div className="flex gap-2">
+                  {[0, 1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setTirosLibres(n)}
+                      className={`flex-1 py-3 rounded-lg font-bold transition-all ${
+                        tirosLibres === n
+                          ? 'bg-green-600 text-white ring-2 ring-green-400'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Advertencia si será expulsado */}
+            {!modoDescontar && (() => {
+              const jugador = faltaEsLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
+              if (!jugador || jugador.descalificado) return null;
+              
+              const tecnicasResultantes = jugador.faltas_tecnicas + (tipoFaltaSeleccionado === 'FALTA_TECNICA' ? 1 : 0);
+              const antideportivasResultantes = jugador.faltas_antideportivas + (tipoFaltaSeleccionado === 'FALTA_ANTIDEPORTIVA' ? 1 : 0);
+              
+              const seraExpulsado = 
+                tipoFaltaSeleccionado === 'FALTA_DESCALIFICANTE' ||
+                tecnicasResultantes >= 2 ||
+                antideportivasResultantes >= 2 ||
+                (tecnicasResultantes >= 1 && antideportivasResultantes >= 1);
+              
+              if (seraExpulsado) {
+                return (
+                  <div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg">
+                    <p className="text-red-400 text-sm font-medium text-center">
+                      ⚠️ Esta falta EXPULSARÁ al jugador
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setMostrarModalFalta(false);
+                  if (modoDescontar) setModoDescontar(false);
+                }}
+                className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleConfirmarFalta(faltaEsLocal, tipoFaltaSeleccionado, tirosLibres, modoDescontar)}
+                disabled={procesando}
+                className={`flex-1 py-3 ${modoDescontar ? 'bg-orange-600 hover:bg-orange-500' : 'bg-red-600 hover:bg-red-500'} text-white font-bold rounded-xl`}
+              >
+                {procesando ? (modoDescontar ? 'Descontando...' : 'Registrando...') : (modoDescontar ? 'Descontar' : 'Confirmar')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de expulsión */}
+      {mostrarExpulsion && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center">
+            <div className="text-6xl mb-4">🚫</div>
+            <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR EXPULSADO</h2>
+            <p className="text-white text-lg mb-6">{jugadorExpulsado}</p>
+            <button
+              onClick={() => setMostrarExpulsion(false)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -986,37 +1323,49 @@ function EquipoPanel({
       
       {/* Titulares */}
       <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-2 sm:mb-3">
-        {titulares.map(jugador => (
-          <button
-            key={jugador.id}
-            onClick={() => handleClickTitular(jugador)}
-            disabled={jugador.faltas >= 5 && !modoDescontar && !modoSustitucion}
-            className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
-              jugador.faltas >= 5
-                ? modoSustitucion
-                  ? jugadorSaliendo?.id === jugador.id
+        {titulares.map(jugador => {
+          const eliminado = jugador.faltas >= 5 || jugador.descalificado;
+          
+          return (
+            <button
+              key={jugador.id}
+              onClick={() => handleClickTitular(jugador)}
+              disabled={eliminado && !modoDescontar && !modoSustitucion}
+              className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
+                eliminado
+                  ? modoSustitucion
+                    ? jugadorSaliendo?.id === jugador.id
+                      ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
+                      : 'bg-red-900/50 border-red-600 hover:border-red-500'
+                    : 'bg-red-900/30 border-red-800 opacity-50'
+                  : modoSustitucion && jugadorSaliendo?.id === jugador.id
                     ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
-                    : 'bg-red-900/50 border-red-600 hover:border-red-500'
-                  : 'bg-red-900/30 border-red-800 opacity-50'
-                : modoSustitucion && jugadorSaliendo?.id === jugador.id
-                  ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
-                  : modoSustitucion
-                    ? 'bg-gray-700 border-yellow-600 hover:border-yellow-500'
-                    : jugador.faltas === 4
-                      ? 'bg-yellow-900/30 border-yellow-600'
-                      : jugadorSeleccionado?.id === jugador.id
-                        ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
-                        : 'bg-gray-700 border-gray-600 hover:border-gray-500'
-            }`}
-          >
-            <div className="text-lg sm:text-xl font-bold text-white">{jugador.numero_camiseta}</div>
-            <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
-            <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1">
-              {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p </span>}
-              {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
-            </div>
-          </button>
-        ))}
+                    : modoSustitucion
+                      ? 'bg-gray-700 border-yellow-600 hover:border-yellow-500'
+                      : jugador.faltas === 4
+                        ? 'bg-yellow-900/30 border-yellow-600'
+                        : jugadorSeleccionado?.id === jugador.id
+                          ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
+                          : 'bg-gray-700 border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="text-lg sm:text-xl font-bold text-white">{jugador.numero_camiseta}</div>
+              <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
+              {jugador.descalificado ? (
+                <div className="text-[10px] sm:text-xs text-red-500 font-bold">Expulsado</div>
+              ) : jugador.faltas >= 5 ? (
+                <div className="text-[10px] sm:text-xs text-red-500 font-bold">5F</div>
+              ) : (
+                <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 flex flex-wrap justify-center gap-x-1">
+                  {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p</span>}
+                  {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
+                  {jugador.faltas_tecnicas > 0 && <span className="text-yellow-400">T{jugador.faltas_tecnicas}</span>}
+                  {jugador.faltas_antideportivas > 0 && <span className="text-orange-400">A{jugador.faltas_antideportivas}</span>}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
       
       {/* Botones de acción */}
@@ -1117,7 +1466,7 @@ function EquipoPanel({
       <div className="text-xs sm:text-sm text-gray-400 mb-1 sm:mb-2">Suplentes:</div>
       <div className="grid grid-cols-5 gap-1 sm:gap-2">
         {suplentes.map(jugador => {
-          const eliminado = jugador.faltas >= 5;
+          const eliminado = jugador.faltas >= 5 || jugador.descalificado;
           const puedeEntrar = modoSustitucion && jugadorSaliendo && !eliminado;
           
           return (
@@ -1135,15 +1484,18 @@ function EquipoPanel({
             >
               <div className="text-base sm:text-lg font-bold text-white">{jugador.numero_camiseta}</div>
               <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
-              {eliminado && (
+              {jugador.descalificado ? (
+                <div className="text-[10px] sm:text-xs text-red-500 font-bold">Expulsado</div>
+              ) : eliminado ? (
                 <div className="text-[10px] sm:text-xs text-red-500 font-bold">5F</div>
-              )}
-              {!eliminado && (jugador.puntos > 0 || jugador.faltas > 0) && (
-                <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1">
-                  {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p </span>}
+              ) : (jugador.puntos > 0 || jugador.faltas > 0 || jugador.faltas_tecnicas > 0 || jugador.faltas_antideportivas > 0) ? (
+                <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 flex flex-wrap justify-center gap-x-1">
+                  {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p</span>}
                   {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
+                  {jugador.faltas_tecnicas > 0 && <span className="text-yellow-400">T{jugador.faltas_tecnicas}</span>}
+                  {jugador.faltas_antideportivas > 0 && <span className="text-orange-400">A{jugador.faltas_antideportivas}</span>}
                 </div>
-              )}
+              ) : null}
             </button>
           );
         })}
