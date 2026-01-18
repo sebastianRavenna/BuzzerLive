@@ -212,6 +212,23 @@ async function descontarAccion(
     }
   }
   
+  // Registrar la acción de descuento en el log (con valor negativo)
+  const valorNegativo = valorPunto > 0 ? -valorPunto : valorFalta > 0 ? -1 : 0;
+  
+  await supabase
+    .from('acciones')
+    .insert({
+      partido_id: partidoId,
+      equipo_id: equipoId,
+      jugador_id: jugadorId,
+      tipo: tipo,
+      cuarto: cuarto,
+      valor: valorNegativo,
+      timestamp_local: new Date().toISOString(),
+      cliente_id: getClienteId(),
+      anulada: false,
+    });
+  
   return true;
 }
 
@@ -265,6 +282,20 @@ export async function finalizarPartido(partidoId: string) {
 
   if (error) throw error;
   return data;
+}
+
+// Suspender partido
+export async function suspenderPartido(partidoId: string, observaciones: string) {
+  const { error } = await supabase
+    .from('partidos')
+    .update({ 
+      estado: 'SUSPENDIDO',
+      observaciones: observaciones,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', partidoId);
+
+  if (error) throw error;
 }
 
 // Obtener acciones de un partido (para el log)

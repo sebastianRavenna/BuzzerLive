@@ -177,6 +177,7 @@ export function PartidosPage() {
 function PartidoCard({ partido }: { partido: MarcadorPartido }) {
   const esEnVivo = partido.estado === 'EN_CURSO';
   const esFinalizado = partido.estado === 'FINALIZADO';
+  const esSuspendido = partido.estado === 'SUSPENDIDO';
   
   return (
     <div className={`
@@ -185,7 +186,9 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
         ? 'border-red-500 bg-red-50/30' 
         : esFinalizado 
           ? 'border-gray-300 bg-gray-50/50' 
-          : 'border-blue-200 bg-blue-50/20'
+          : esSuspendido
+            ? 'border-yellow-500 bg-yellow-50/30'
+            : 'border-blue-200 bg-blue-50/20'
       }
     `}>
       {/* Header */}
@@ -199,6 +202,11 @@ function PartidoCard({ partido }: { partido: MarcadorPartido }) {
         {esFinalizado && (
           <span className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-700 text-xs font-bold rounded">
             Final
+          </span>
+        )}
+        {esSuspendido && (
+          <span className="inline-flex items-center px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded">
+            Suspendido
           </span>
         )}
         {partido.estado === 'PROGRAMADO' && (

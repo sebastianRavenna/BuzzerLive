@@ -6,6 +6,7 @@ import {
   registrarAccion,
   cambiarCuarto,
   finalizarPartido,
+  suspenderPartido,
   suscribirseAPartido,
   actualizarTiemposMuertos
 } from '../services/partido.service';
@@ -49,6 +50,9 @@ export function PartidoLivePage() {
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mostrarConfirmacionFin, setMostrarConfirmacionFin] = useState(false);
+  const [mostrarConfirmacionSalir, setMostrarConfirmacionSalir] = useState(false);
+  const [mostrarSuspender, setMostrarSuspender] = useState(false);
+  const [observacionesSuspension, setObservacionesSuspension] = useState('');
   const [ultimos2MinLocal, setUltimos2MinLocal] = useState(false);
   const [ultimos2MinVisitante, setUltimos2MinVisitante] = useState(false);
   
@@ -295,6 +299,13 @@ export function PartidoLivePage() {
     const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     if (!equipoId) return;
 
+    // Validar que el jugador tenga faltas para descontar
+    if (modoDescontar && jugador.faltas <= 0) {
+      setError(`${jugador.apellido} no tiene faltas para descontar`);
+      setTimeout(() => setError(null), 2000);
+      return;
+    }
+
     const delta = modoDescontar ? -1 : 1;
     
     // Actualizar UI optimista inmediatamente
@@ -469,6 +480,28 @@ export function PartidoLivePage() {
     }
   };
 
+  const handleSuspenderPartido = async () => {
+    if (!id || !partido) return;
+    
+    if (!observacionesSuspension.trim()) {
+      setError('Debés ingresar las observaciones de la suspensión');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    setProcesando(true);
+    try {
+      await suspenderPartido(id, observacionesSuspension.trim());
+      navigate('/partidos');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al suspender partido');
+    } finally {
+      setProcesando(false);
+      setMostrarSuspender(false);
+      setObservacionesSuspension('');
+    }
+  };
+
   // Componentes auxiliares
   const jugadoresTitularesLocal = jugadoresLocal.filter(j => titularesLocal.has(j.id));
   const jugadoresSuplentesLocal = jugadoresLocal.filter(j => !titularesLocal.has(j.id));
@@ -521,6 +554,17 @@ export function PartidoLivePage() {
   if (fase === 'seleccion-titulares') {
     return (
       <div className="min-h-screen bg-gray-900 p-4">
+        {/* Botón volver */}
+        <button
+          onClick={() => navigate('/partidos')}
+          className="mb-4 inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Volver a partidos
+        </button>
+        
         <h1 className="text-2xl font-bold text-white text-center mb-6">
           Seleccionar Titulares (5 por equipo)
         </h1>
@@ -595,13 +639,29 @@ export function PartidoLivePage() {
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col relative">
-      {/* Botón finalizar - Esquina superior derecha */}
+      {/* Botón salir - Esquina superior izquierda */}
       <button
-        onClick={() => setMostrarConfirmacionFin(true)}
-        className="absolute top-3 right-3 px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors z-10"
+        onClick={() => setMostrarConfirmacionSalir(true)}
+        className="absolute top-3 left-3 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold rounded transition-colors z-10"
       >
-        FINALIZAR
+        ← SALIR
       </button>
+      
+      {/* Botones superiores derechos */}
+      <div className="absolute top-3 right-3 flex gap-2 z-10">
+        <button
+          onClick={() => setMostrarSuspender(true)}
+          className="px-3 py-2 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold rounded transition-colors"
+        >
+          SUSPENDER
+        </button>
+        <button
+          onClick={() => setMostrarConfirmacionFin(true)}
+          className="px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors"
+        >
+          FINALIZAR
+        </button>
+      </div>
       
       {/* Indicador de conexión */}
       {(!online || pendientes > 0) && (
@@ -621,37 +681,37 @@ export function PartidoLivePage() {
       )}
       
       {/* Header con marcador */}
-      <header className="bg-gray-800 p-3">
+      <header className="bg-gray-800 p-2 sm:p-3">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           {/* Marcador Local */}
           <div className="text-center flex-1">
-            <div className="text-sm text-gray-400">{equipoLocal.nombre_corto || equipoLocal.nombre}</div>
-            <div className="text-5xl font-bold text-white">{partido.puntos_local}</div>
+            <div className="text-xs sm:text-sm text-gray-400 truncate">{equipoLocal.nombre_corto || equipoLocal.nombre}</div>
+            <div className="text-4xl sm:text-5xl font-bold text-white">{partido.puntos_local}</div>
             <FaltasIndicator faltas={partido.faltas_equipo_local[Math.max(0, partido.cuarto_actual - 1)] || 0} />
           </div>
           
           {/* Centro - Cuarto y controles */}
-          <div className="text-center px-4">
-            <div className="text-xs text-gray-500 uppercase">Cuarto</div>
-            <div className="text-3xl font-bold text-white">
+          <div className="text-center px-2 sm:px-4">
+            <div className="text-[10px] sm:text-xs text-gray-500 uppercase">Cuarto</div>
+            <div className="text-2xl sm:text-3xl font-bold text-white">
               {partido.cuarto_actual > 4 ? `OT${partido.cuarto_actual - 4}` : `Q${partido.cuarto_actual}`}
             </div>
-            <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-600 text-white text-xs font-bold rounded mt-1">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-              EN VIVO
+            <div className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-600 text-white text-[10px] sm:text-xs font-bold rounded mt-1">
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse"></span>
+              VIVO
             </div>
-            <div className="mt-2">
+            <div className="mt-1 sm:mt-2">
               <button
                 onClick={handleCambiarCuarto}
                 disabled={procesando}
-                className={`px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors ${
+                className={`px-2 sm:px-4 py-1.5 sm:py-2 text-white text-xs sm:text-sm font-bold rounded-lg transition-colors ${
                   modoDescontar 
                     ? 'bg-orange-600 hover:bg-orange-700' 
                     : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
                 {modoDescontar 
-                  ? `← Volver Q${partido.cuarto_actual > 1 ? partido.cuarto_actual - 1 : 1}`
+                  ? `← Q${partido.cuarto_actual > 1 ? partido.cuarto_actual - 1 : 1}`
                   : `Fin ${partido.cuarto_actual > 4 ? `OT${partido.cuarto_actual - 4}` : `Q${partido.cuarto_actual}`} →`
                 }
               </button>
@@ -660,16 +720,16 @@ export function PartidoLivePage() {
           
           {/* Marcador Visitante */}
           <div className="text-center flex-1">
-            <div className="text-sm text-gray-400">{equipoVisitante.nombre_corto || equipoVisitante.nombre}</div>
-            <div className="text-5xl font-bold text-white">{partido.puntos_visitante}</div>
+            <div className="text-xs sm:text-sm text-gray-400 truncate">{equipoVisitante.nombre_corto || equipoVisitante.nombre}</div>
+            <div className="text-4xl sm:text-5xl font-bold text-white">{partido.puntos_visitante}</div>
             <FaltasIndicator faltas={partido.faltas_equipo_visitante[Math.max(0, partido.cuarto_actual - 1)] || 0} />
           </div>
         </div>
       </header>
 
       {/* Contenido principal - Dos equipos */}
-      <main className="flex-1 p-4 overflow-auto">
-        <div className="grid grid-cols-2 gap-6 max-w-6xl mx-auto">
+      <main className="flex-1 p-2 sm:p-4 overflow-auto">
+        <div className="grid grid-cols-2 gap-2 sm:gap-6 max-w-6xl mx-auto">
           {/* EQUIPO LOCAL */}
           <EquipoPanel
             equipo={equipoLocal}
@@ -715,18 +775,18 @@ export function PartidoLivePage() {
         <div className="mt-6 text-center">
           <button
             onClick={() => setModoDescontar(!modoDescontar)}
-            className={`px-8 py-3 font-bold rounded-xl transition-all ${
+            className={`px-4 sm:px-8 py-2 sm:py-3 text-sm sm:text-base font-bold rounded-xl transition-all ${
               modoDescontar
                 ? 'bg-orange-500 text-white ring-4 ring-orange-300'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            {modoDescontar ? '✓ MODO DESCONTAR ACTIVO' : 'DESCONTAR'}
+            {modoDescontar ? '✓ DESCONTAR ACTIVO' : 'DESCONTAR'}
           </button>
         </div>
         
         {/* Log de últimas acciones */}
-        <div className="mt-6">
+        <div className="mt-3 sm:mt-6">
           <LogAcciones 
             partidoId={id!} 
             equipoLocalId={equipoLocal.id} 
@@ -766,6 +826,74 @@ export function PartidoLivePage() {
                   {procesando ? 'Finalizando...' : 'Sí, Finalizar'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmación salir */}
+      {mostrarConfirmacionSalir && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center">
+            <h2 className="text-xl font-bold text-white mb-4">¿Salir del partido?</h2>
+            <p className="text-gray-400 mb-6">
+              El partido seguirá en curso. Podés volver a entrar en cualquier momento.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMostrarConfirmacionSalir(false)}
+                className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => navigate('/partidos')}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl"
+              >
+                Sí, Salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal suspender partido */}
+      {mostrarSuspender && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Suspender Partido</h2>
+            <p className="text-gray-400 mb-4 text-center text-sm">
+              {equipoLocal?.nombre_corto} {partido?.puntos_local} - {partido?.puntos_visitante} {equipoVisitante?.nombre_corto}
+            </p>
+            <div className="mb-4">
+              <label className="block text-gray-300 text-sm mb-2">
+                Motivo de la suspensión: <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={observacionesSuspension}
+                onChange={(e) => setObservacionesSuspension(e.target.value)}
+                placeholder="Ej: Lluvia, falta de luz, incidentes..."
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setMostrarSuspender(false);
+                  setObservacionesSuspension('');
+                }}
+                className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSuspenderPartido}
+                disabled={procesando || !observacionesSuspension.trim()}
+                className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold rounded-xl"
+              >
+                {procesando ? 'Suspendiendo...' : 'Suspender'}
+              </button>
             </div>
           </div>
         </div>
@@ -850,20 +978,20 @@ function EquipoPanel({
   const tiemposDisponibles = tiemposMaximo - tiemposUsados;
 
   return (
-    <div className="bg-gray-800/50 rounded-xl p-4">
+    <div className="bg-gray-800/50 rounded-xl p-2 sm:p-4">
       {/* Nombre equipo */}
-      <h2 className="text-lg font-bold text-white text-center mb-3">
+      <h2 className="text-base sm:text-lg font-bold text-white text-center mb-2 sm:mb-3">
         {equipo.nombre_corto || equipo.nombre}
       </h2>
       
       {/* Titulares */}
-      <div className="grid grid-cols-5 gap-2 mb-3">
+      <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-2 sm:mb-3">
         {titulares.map(jugador => (
           <button
             key={jugador.id}
             onClick={() => handleClickTitular(jugador)}
             disabled={jugador.faltas >= 5 && !modoDescontar && !modoSustitucion}
-            className={`p-2 rounded-lg border-2 transition-all text-center ${
+            className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
               jugador.faltas >= 5
                 ? modoSustitucion
                   ? jugadorSaliendo?.id === jugador.id
@@ -881,9 +1009,9 @@ function EquipoPanel({
                         : 'bg-gray-700 border-gray-600 hover:border-gray-500'
             }`}
           >
-            <div className="text-xl font-bold text-white">{jugador.numero_camiseta}</div>
-            <div className="text-xs text-gray-400 truncate">{jugador.apellido}</div>
-            <div className="text-xs mt-1">
+            <div className="text-lg sm:text-xl font-bold text-white">{jugador.numero_camiseta}</div>
+            <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
+            <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1">
               {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p </span>}
               {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
             </div>
@@ -892,11 +1020,11 @@ function EquipoPanel({
       </div>
       
       {/* Botones de acción */}
-      <div className="grid grid-cols-5 gap-2 mb-3">
+      <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-2 sm:mb-3">
         <button
           onClick={() => onPunto(1)}
           disabled={!jugadorSeleccionado || procesando}
-          className={`py-3 font-bold rounded-lg transition-colors ${
+          className={`py-2 sm:py-3 text-sm sm:text-base font-bold rounded-lg transition-colors ${
             modoDescontar
               ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700'
               : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-700'
@@ -907,7 +1035,7 @@ function EquipoPanel({
         <button
           onClick={() => onPunto(2)}
           disabled={!jugadorSeleccionado || procesando}
-          className={`py-3 font-bold rounded-lg transition-colors ${
+          className={`py-2 sm:py-3 text-sm sm:text-base font-bold rounded-lg transition-colors ${
             modoDescontar
               ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700'
               : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-700'
@@ -918,7 +1046,7 @@ function EquipoPanel({
         <button
           onClick={() => onPunto(3)}
           disabled={!jugadorSeleccionado || procesando}
-          className={`py-3 font-bold rounded-lg transition-colors ${
+          className={`py-2 sm:py-3 text-sm sm:text-base font-bold rounded-lg transition-colors ${
             modoDescontar
               ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700'
               : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-700'
@@ -929,7 +1057,7 @@ function EquipoPanel({
         <button
           onClick={onFalta}
           disabled={!jugadorSeleccionado || procesando}
-          className={`py-3 font-bold rounded-lg transition-colors ${
+          className={`py-2 sm:py-3 text-xs sm:text-base font-bold rounded-lg transition-colors ${
             modoDescontar
               ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700'
               : 'bg-red-600 hover:bg-red-700 disabled:bg-gray-700'
@@ -940,7 +1068,7 @@ function EquipoPanel({
         <button
           onClick={onTiempoMuerto}
           disabled={procesando || (!modoDescontar && tiemposDisponibles <= 0)}
-          className={`py-3 font-bold rounded-lg transition-colors text-xs ${
+          className={`py-2 sm:py-3 font-bold rounded-lg transition-colors text-xs ${
             modoDescontar
               ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700'
               : 'bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700'
@@ -954,9 +1082,9 @@ function EquipoPanel({
       {cuartoActual === 4 && !ultimos2MinActivo && tiemposUsados === 0 && (
         <button
           onClick={onUltimos2Min}
-          className="w-full py-2 mb-3 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold rounded-lg"
+          className="w-full py-1.5 sm:py-2 mb-2 sm:mb-3 bg-yellow-700 hover:bg-yellow-600 text-white text-[10px] sm:text-xs font-bold rounded-lg"
         >
-          ⏱ Últimos 2 min (pierde 1 tiempo)
+          ⏱ Últ. 2 min (-1 tiempo)
         </button>
       )}
       
@@ -966,49 +1094,59 @@ function EquipoPanel({
           setModoSustitucion(!modoSustitucion);
           setJugadorSaliendo(null);
         }}
-        className={`w-full py-2 mb-3 font-bold rounded-lg transition-colors ${
+        className={`w-full py-1.5 sm:py-2 mb-2 sm:mb-3 text-sm sm:text-base font-bold rounded-lg transition-colors ${
           modoSustitucion
             ? 'bg-yellow-600 text-white'
             : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
         }`}
       >
-        {modoSustitucion ? '✕ Cancelar Sustitución' : '⇄ Sustitución'}
+        {modoSustitucion ? '✕ Cancelar' : '⇄ Sustitución'}
       </button>
       
       {/* Instrucción sustitución */}
       {modoSustitucion && (
-        <div className="text-xs text-yellow-400 text-center mb-2">
+        <div className="text-[10px] sm:text-xs text-yellow-400 text-center mb-2">
           {jugadorSaliendo 
-            ? `Seleccioná el suplente que entra por #${jugadorSaliendo.numero_camiseta}`
+            ? `Seleccioná suplente por #${jugadorSaliendo.numero_camiseta}`
             : 'Seleccioná el titular que sale'
           }
         </div>
       )}
       
       {/* Suplentes */}
-      <div className="text-sm text-gray-400 mb-2">Suplentes:</div>
-      <div className="grid grid-cols-5 gap-2">
-        {suplentes.map(jugador => (
-          <button
-            key={jugador.id}
-            onClick={() => handleClickSuplente(jugador)}
-            disabled={!modoSustitucion || !jugadorSaliendo}
-            className={`p-2 rounded-lg border-2 transition-all text-center ${
-              modoSustitucion && jugadorSaliendo
-                ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
-                : 'bg-gray-800 border-gray-700 opacity-60'
-            }`}
-          >
-            <div className="text-lg font-bold text-white">{jugador.numero_camiseta}</div>
-            <div className="text-xs text-gray-400 truncate">{jugador.apellido}</div>
-            {(jugador.puntos > 0 || jugador.faltas > 0) && (
-              <div className="text-xs mt-1">
-                {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p </span>}
-                {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
-              </div>
-            )}
-          </button>
-        ))}
+      <div className="text-xs sm:text-sm text-gray-400 mb-1 sm:mb-2">Suplentes:</div>
+      <div className="grid grid-cols-5 gap-1 sm:gap-2">
+        {suplentes.map(jugador => {
+          const eliminado = jugador.faltas >= 5;
+          const puedeEntrar = modoSustitucion && jugadorSaliendo && !eliminado;
+          
+          return (
+            <button
+              key={jugador.id}
+              onClick={() => handleClickSuplente(jugador)}
+              disabled={!puedeEntrar}
+              className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
+                eliminado
+                  ? 'bg-red-900/30 border-red-800 opacity-50 cursor-not-allowed'
+                  : puedeEntrar
+                    ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
+                    : 'bg-gray-800 border-gray-700 opacity-60'
+              }`}
+            >
+              <div className="text-base sm:text-lg font-bold text-white">{jugador.numero_camiseta}</div>
+              <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
+              {eliminado && (
+                <div className="text-[10px] sm:text-xs text-red-500 font-bold">5F</div>
+              )}
+              {!eliminado && (jugador.puntos > 0 || jugador.faltas > 0) && (
+                <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1">
+                  {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p </span>}
+                  {jugador.faltas > 0 && <span className="text-red-400">{jugador.faltas}f</span>}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

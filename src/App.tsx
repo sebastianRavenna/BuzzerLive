@@ -6,6 +6,7 @@ import { PartidosPage } from './pages/PartidosPage';
 import { PartidoLivePage } from './pages/PartidoLivePage';
 import { MarcadorPublicoPage } from './pages/MarcadorPublicoPage';
 import { InstallPWA } from './components/common/InstallPWA';
+import { UpdatePrompt } from './components/common/UpdatePrompt';
 
 function App() {
   return (
@@ -24,6 +25,9 @@ function App() {
       
       {/* Banner de instalación PWA */}
       <InstallPWA />
+      
+      {/* Notificación de actualización */}
+      <UpdatePrompt />
     </BrowserRouter>
   );
 }
