@@ -69,10 +69,10 @@ export async function getPartidoCompleto(partidoId: string) {
     const faltasJugador = accionesFaltas?.filter(a => a.jugador_id === jugador.id) || [];
     const faltas_tecnicas = faltasJugador.filter(a => a.tipo === 'FALTA_TECNICA').length;
     const faltas_antideportivas = faltasJugador.filter(a => a.tipo === 'FALTA_ANTIDEPORTIVA').length;
-    const tiene_descalificante = faltasJugador.some(a => a.tipo === 'FALTA_DESCALIFICANTE');
+    const expulsado_directo = faltasJugador.some(a => a.tipo === 'FALTA_DESCALIFICANTE');
     
-    // Expulsado si: 2 técnicas, 2 antideportivas, 1T+1A, o 1 expulsión directa
-    const descalificado = tiene_descalificante || 
+    // Descalificado si: 2 técnicas, 2 antideportivas, 1T+1A, o 1 expulsión directa
+    const descalificado = expulsado_directo || 
                           faltas_tecnicas >= 2 || 
                           faltas_antideportivas >= 2 ||
                           (faltas_tecnicas >= 1 && faltas_antideportivas >= 1);
@@ -84,6 +84,7 @@ export async function getPartidoCompleto(partidoId: string) {
       faltas_tecnicas,
       faltas_antideportivas,
       descalificado,
+      expulsado_directo,
       participo: participacion?.participo || false,
       es_titular: participacion?.es_titular || false,
     };
@@ -136,7 +137,9 @@ export async function registrarAccion(
   jugadorId: string | null,
   tipo: TipoAccion,
   cuarto: number,
-  esDescuento: boolean = false
+  esDescuento: boolean = false,
+  tirosLibres: number = 0,
+  numeroFalta: number | null = null
 ) {
   // Si es descuento, usamos una lógica diferente (actualización directa)
   if (esDescuento) {
@@ -154,6 +157,31 @@ export async function registrarAccion(
   });
 
   if (error) throw error;
+  
+  // Si hay tiros libres o número de falta, actualizar la acción recién creada
+  if (data && (tirosLibres > 0 || numeroFalta !== null)) {
+    // Buscar la última acción del jugador en este partido
+    const { data: ultimaAccion } = await supabase
+      .from('acciones')
+      .select('id')
+      .eq('partido_id', partidoId)
+      .eq('jugador_id', jugadorId)
+      .eq('tipo', tipo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (ultimaAccion) {
+      await supabase
+        .from('acciones')
+        .update({ 
+          tiros_libres: tirosLibres,
+          numero_falta: numeroFalta
+        })
+        .eq('id', ultimaAccion.id);
+    }
+  }
+  
   return data;
 }
 

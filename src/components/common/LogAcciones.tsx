@@ -10,6 +10,8 @@ interface AccionLog {
   jugador_numero: number | null;
   jugador_apellido: string | null;
   timestamp_local: string;
+  tiros_libres: number;
+  numero_falta: number | null;
 }
 
 interface LogAccionesProps {
@@ -33,6 +35,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           cuarto,
           valor,
           timestamp_local,
+          tiros_libres,
+          numero_falta,
           equipo:equipos(nombre_corto),
           jugador:jugadores(numero_camiseta, apellido)
         `)
@@ -57,6 +61,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           jugador_numero: (a.jugador as any)?.numero_camiseta || null,
           jugador_apellido: (a.jugador as any)?.apellido || null,
           timestamp_local: a.timestamp_local,
+          tiros_libres: a.tiros_libres || 0,
+          numero_falta: a.numero_falta || null,
         })));
       }
       setLoading(false);
@@ -86,6 +92,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               cuarto,
               valor,
               timestamp_local,
+              tiros_libres,
+              numero_falta,
               equipo:equipos(nombre_corto),
               jugador:jugadores(numero_camiseta, apellido)
             `)
@@ -102,6 +110,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               jugador_numero: (data.jugador as any)?.numero_camiseta || null,
               jugador_apellido: (data.jugador as any)?.apellido || null,
               timestamp_local: data.timestamp_local,
+              tiros_libres: data.tiros_libres || 0,
+              numero_falta: data.numero_falta || null,
             };
             
             setAcciones(prev => [nuevaAccion, ...prev].slice(0, 10));
@@ -115,7 +125,9 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     };
   }, [partidoId]);
 
-  const formatTipo = (tipo: string, valor: number): string => {
+  const formatTipo = (accion: AccionLog): string => {
+    const { tipo, valor, numero_falta, tiros_libres } = accion;
+    
     // Si valor es negativo, es un descuento
     if (valor < 0) {
       switch (tipo) {
@@ -130,13 +142,21 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       }
     }
     
+    // Construir texto para faltas con número y tiros
+    const buildFaltaText = (sigla: string): string => {
+      let texto = sigla;
+      if (numero_falta) texto = `${numero_falta}ª ${sigla}`;
+      if (tiros_libres > 0) texto += ` +${tiros_libres}TL`;
+      return texto;
+    };
+    
     switch (tipo) {
       case 'PUNTO_1': return '+1';
       case 'PUNTO_2': return '+2';
       case 'PUNTO_3': return '+3';
-      case 'FALTA_PERSONAL': return 'FP';
-      case 'FALTA_TECNICA': return 'FT';
-      case 'FALTA_ANTIDEPORTIVA': return 'FA';
+      case 'FALTA_PERSONAL': return buildFaltaText('FP');
+      case 'FALTA_TECNICA': return buildFaltaText('FT');
+      case 'FALTA_ANTIDEPORTIVA': return buildFaltaText('FA');
       case 'FALTA_DESCALIFICANTE': return 'EXPULSIÓN';
       case 'TIEMPO_MUERTO': return 'TIEMPO';
       case 'FIN_CUARTO': return `FIN Q${valor || ''}`;
@@ -198,7 +218,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
             {esAccionSistema(accion.tipo) ? (
               // Acciones de sistema (cambio de cuarto)
               <span className={`font-bold ${getColorClase(accion.tipo, accion.valor)}`}>
-                {formatTipo(accion.tipo, accion.valor)}
+                {formatTipo(accion)}
               </span>
             ) : (
               // Acciones normales
@@ -211,7 +231,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
                   </span>
                 )}
                 <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo, accion.valor)}`}>
-                  {formatTipo(accion.tipo, accion.valor)}
+                  {formatTipo(accion)}
                 </span>
               </>
             )}

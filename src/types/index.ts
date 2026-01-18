@@ -184,6 +184,7 @@ export interface JugadorEnPartido extends Jugador {
   faltas_tecnicas: number;
   faltas_antideportivas: number;
   descalificado: boolean;
+  expulsado_directo: boolean; // true si fue por falta de expulsión directa
   participo: boolean;
   es_titular?: boolean;
 }

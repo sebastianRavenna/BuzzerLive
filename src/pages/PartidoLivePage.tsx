@@ -60,9 +60,10 @@ export function PartidoLivePage() {
   const [tipoFaltaSeleccionado, setTipoFaltaSeleccionado] = useState<'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE'>('FALTA_PERSONAL');
   const [tirosLibres, setTirosLibres] = useState(0);
   
-  // Modal de expulsión
-  const [mostrarExpulsion, setMostrarExpulsion] = useState(false);
-  const [jugadorExpulsado, setJugadorExpulsado] = useState<string>('');
+  // Modal de alerta (5ta falta, expulsión, descalificación)
+  const [mostrarAlertaFalta, setMostrarAlertaFalta] = useState(false);
+  const [tipoAlerta, setTipoAlerta] = useState<'5F' | 'EXPULSADO' | 'DESCALIFICADO'>('5F');
+  const [jugadorAlerta, setJugadorAlerta] = useState<string>('');
   
   // Editar número de camiseta
   const [mostrarEditarNumero, setMostrarEditarNumero] = useState(false);
@@ -362,7 +363,7 @@ export function PartidoLivePage() {
   const handleConfirmarFalta = async (
     esLocal: boolean, 
     tipoFalta: 'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE',
-    _tiros: number, // TODO: Guardar en DB en futuro
+    tiros: number,
     esDescuento: boolean = false
   ) => {
     const jugador = esLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
@@ -382,7 +383,11 @@ export function PartidoLivePage() {
     let nuevasFaltas = jugadorActual.faltas;
     let nuevasFaltasTecnicas = jugadorActual.faltas_tecnicas;
     let nuevasFaltasAntideportivas = jugadorActual.faltas_antideportivas;
-    let quedaExpulsado = jugadorActual.descalificado;
+    let nuevoExpulsadoDirecto = jugadorActual.expulsado_directo;
+    let quedaDescalificado = jugadorActual.descalificado;
+    
+    // Calcular número de falta (para el log)
+    let numeroFalta: number | null = null;
     
     if (esDescuento) {
       // Descontar según tipo
@@ -394,26 +399,30 @@ export function PartidoLivePage() {
         nuevasFaltasAntideportivas = Math.max(0, nuevasFaltasAntideportivas - 1);
       }
     } else {
-      // Sumar falta
+      // Sumar falta y calcular número
       if (tipoFalta === 'FALTA_PERSONAL') {
         nuevasFaltas += 1;
+        numeroFalta = nuevasFaltas;
       } else if (tipoFalta === 'FALTA_TECNICA') {
         nuevasFaltasTecnicas += 1;
+        numeroFalta = nuevasFaltasTecnicas;
       } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
         nuevasFaltasAntideportivas += 1;
+        numeroFalta = nuevasFaltasAntideportivas;
       } else if (tipoFalta === 'FALTA_DESCALIFICANTE') {
-        quedaExpulsado = true;
+        nuevoExpulsadoDirecto = true;
+        quedaDescalificado = true;
       }
       
-      // Reglas de expulsión:
+      // Reglas de descalificación por acumulación:
       // - 2 técnicas
       // - 2 antideportivas  
       // - 1 técnica + 1 antideportiva
-      // - 1 expulsión directa
-      if (nuevasFaltasTecnicas >= 2 || 
+      if (!nuevoExpulsadoDirecto && (
+          nuevasFaltasTecnicas >= 2 || 
           nuevasFaltasAntideportivas >= 2 || 
-          (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1)) {
-        quedaExpulsado = true;
+          (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1))) {
+        quedaDescalificado = true;
       }
     }
     
@@ -425,7 +434,8 @@ export function PartidoLivePage() {
           faltas: nuevasFaltas,
           faltas_tecnicas: nuevasFaltasTecnicas,
           faltas_antideportivas: nuevasFaltasAntideportivas,
-          descalificado: quedaExpulsado,
+          descalificado: quedaDescalificado,
+          expulsado_directo: nuevoExpulsadoDirecto,
           participo: true 
         } : j
       );
@@ -456,13 +466,29 @@ export function PartidoLivePage() {
     if (esDescuento) setModoDescontar(false);
     setMostrarModalFalta(false);
 
-    // Mostrar modal si quedó expulsado
-    if (quedaExpulsado && !jugadorActual.descalificado && !esDescuento) {
-      setJugadorExpulsado(jugador.apellido);
-      setMostrarExpulsion(true);
+    // Mostrar alertas según el caso (solo si no es descuento)
+    if (!esDescuento) {
+      // 5ta falta personal
+      if (tipoFalta === 'FALTA_PERSONAL' && nuevasFaltas === 5 && !quedaDescalificado) {
+        setJugadorAlerta(jugador.apellido);
+        setTipoAlerta('5F');
+        setMostrarAlertaFalta(true);
+      }
+      // Expulsión directa
+      else if (tipoFalta === 'FALTA_DESCALIFICANTE') {
+        setJugadorAlerta(jugador.apellido);
+        setTipoAlerta('EXPULSADO');
+        setMostrarAlertaFalta(true);
+      }
+      // Descalificación por acumulación (solo si no estaba ya descalificado)
+      else if (quedaDescalificado && !jugadorActual.descalificado) {
+        setJugadorAlerta(jugador.apellido);
+        setTipoAlerta('DESCALIFICADO');
+        setMostrarAlertaFalta(true);
+      }
     }
 
-    // Si está offline, guardar en cola (incluir tiros en el futuro)
+    // Si está offline, guardar en cola
     if (!online) {
       addToOfflineQueue(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
       setPendientes(getOfflineQueue().length);
@@ -472,7 +498,7 @@ export function PartidoLivePage() {
     // Si está online, enviar al servidor
     setProcesando(true);
     try {
-      await registrarAccion(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
+      await registrarAccion(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento, tiros, numeroFalta);
     } catch (err) {
       addToOfflineQueue(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
       setPendientes(getOfflineQueue().length);
@@ -1219,15 +1245,34 @@ export function PartidoLivePage() {
         </div>
       )}
 
-      {/* Modal de expulsión */}
-      {mostrarExpulsion && (
+      {/* Modal de alerta (5ta falta, expulsión, descalificación) */}
+      {mostrarAlertaFalta && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center">
-            <div className="text-6xl mb-4">🚫</div>
-            <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR EXPULSADO</h2>
-            <p className="text-white text-lg mb-6">{jugadorExpulsado}</p>
+            {tipoAlerta === '5F' && (
+              <>
+                <div className="text-6xl mb-4">⚠️</div>
+                <h2 className="text-xl font-bold text-yellow-500 mb-2">5ª FALTA PERSONAL</h2>
+                <p className="text-gray-400 text-sm mb-2">El jugador debe abandonar el campo</p>
+              </>
+            )}
+            {tipoAlerta === 'EXPULSADO' && (
+              <>
+                <div className="text-6xl mb-4">🚫</div>
+                <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR EXPULSADO</h2>
+                <p className="text-gray-400 text-sm mb-2">Expulsión directa</p>
+              </>
+            )}
+            {tipoAlerta === 'DESCALIFICADO' && (
+              <>
+                <div className="text-6xl mb-4">❌</div>
+                <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR DESCALIFICADO</h2>
+                <p className="text-gray-400 text-sm mb-2">Por acumulación de faltas</p>
+              </>
+            )}
+            <p className="text-white text-lg mb-6">{jugadorAlerta}</p>
             <button
-              onClick={() => setMostrarExpulsion(false)}
+              onClick={() => setMostrarAlertaFalta(false)}
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl"
             >
               Continuar
@@ -1325,19 +1370,34 @@ function EquipoPanel({
       <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-2 sm:mb-3">
         {titulares.map(jugador => {
           const eliminado = jugador.faltas >= 5 || jugador.descalificado;
+          // En modo descontar, permitir seleccionar jugadores eliminados
+          const deshabilitado = eliminado && !modoDescontar && !modoSustitucion;
+          
+          // Determinar qué mostrar: 5F, Expulsado, o GD
+          const getEstadoJugador = () => {
+            if (jugador.expulsado_directo) return 'Expulsado';
+            if (jugador.descalificado) return 'GD'; // Descalificado por acumulación
+            if (jugador.faltas >= 5) return '5F';
+            return null;
+          };
+          const estadoJugador = getEstadoJugador();
           
           return (
             <button
               key={jugador.id}
               onClick={() => handleClickTitular(jugador)}
-              disabled={eliminado && !modoDescontar && !modoSustitucion}
+              disabled={deshabilitado}
               className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
                 eliminado
-                  ? modoSustitucion
-                    ? jugadorSaliendo?.id === jugador.id
-                      ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
-                      : 'bg-red-900/50 border-red-600 hover:border-red-500'
-                    : 'bg-red-900/30 border-red-800 opacity-50'
+                  ? modoDescontar
+                    ? jugadorSeleccionado?.id === jugador.id
+                      ? 'bg-orange-900 border-orange-500 ring-2 ring-orange-400'
+                      : 'bg-red-900/50 border-red-600 hover:border-orange-500 cursor-pointer'
+                    : modoSustitucion
+                      ? jugadorSaliendo?.id === jugador.id
+                        ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
+                        : 'bg-red-900/50 border-red-600 hover:border-red-500'
+                      : 'bg-red-900/30 border-red-800 opacity-50'
                   : modoSustitucion && jugadorSaliendo?.id === jugador.id
                     ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
                     : modoSustitucion
@@ -1351,10 +1411,12 @@ function EquipoPanel({
             >
               <div className="text-lg sm:text-xl font-bold text-white">{jugador.numero_camiseta}</div>
               <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
-              {jugador.descalificado ? (
-                <div className="text-[10px] sm:text-xs text-red-500 font-bold">Expulsado</div>
-              ) : jugador.faltas >= 5 ? (
-                <div className="text-[10px] sm:text-xs text-red-500 font-bold">5F</div>
+              {estadoJugador ? (
+                <div className={`text-[10px] sm:text-xs font-bold ${
+                  estadoJugador === '5F' ? 'text-yellow-500' : 'text-red-500'
+                }`}>
+                  {estadoJugador}
+                </div>
               ) : (
                 <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 flex flex-wrap justify-center gap-x-1">
                   {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p</span>}
@@ -1469,6 +1531,15 @@ function EquipoPanel({
           const eliminado = jugador.faltas >= 5 || jugador.descalificado;
           const puedeEntrar = modoSustitucion && jugadorSaliendo && !eliminado;
           
+          // Determinar qué mostrar: 5F, Expulsado, o GD
+          const getEstadoJugador = () => {
+            if (jugador.expulsado_directo) return 'Expulsado';
+            if (jugador.descalificado) return 'GD';
+            if (jugador.faltas >= 5) return '5F';
+            return null;
+          };
+          const estadoJugador = getEstadoJugador();
+          
           return (
             <button
               key={jugador.id}
@@ -1484,10 +1555,12 @@ function EquipoPanel({
             >
               <div className="text-base sm:text-lg font-bold text-white">{jugador.numero_camiseta}</div>
               <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
-              {jugador.descalificado ? (
-                <div className="text-[10px] sm:text-xs text-red-500 font-bold">Expulsado</div>
-              ) : eliminado ? (
-                <div className="text-[10px] sm:text-xs text-red-500 font-bold">5F</div>
+              {estadoJugador ? (
+                <div className={`text-[10px] sm:text-xs font-bold ${
+                  estadoJugador === '5F' ? 'text-yellow-500' : 'text-red-500'
+                }`}>
+                  {estadoJugador}
+                </div>
               ) : (jugador.puntos > 0 || jugador.faltas > 0 || jugador.faltas_tecnicas > 0 || jugador.faltas_antideportivas > 0) ? (
                 <div className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 flex flex-wrap justify-center gap-x-1">
                   {jugador.puntos > 0 && <span className="text-green-400">{jugador.puntos}p</span>}
