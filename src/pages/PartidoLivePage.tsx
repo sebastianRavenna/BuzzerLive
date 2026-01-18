@@ -4,6 +4,7 @@ import {
   getPartidoCompleto, 
   iniciarPartido, 
   registrarAccion,
+  registrarAccionSistema,
   cambiarCuarto,
   finalizarPartido,
   suspenderPartido,
@@ -380,6 +381,7 @@ export function PartidoLivePage() {
     const delta = esDescuento ? -1 : 1;
     
     // Calcular nuevos valores
+    // IMPORTANTE: faltas = total de todas las faltas (personales + técnicas + antideportivas)
     let nuevasFaltas = jugadorActual.faltas;
     let nuevasFaltasTecnicas = jugadorActual.faltas_tecnicas;
     let nuevasFaltasAntideportivas = jugadorActual.faltas_antideportivas;
@@ -390,25 +392,36 @@ export function PartidoLivePage() {
     let numeroFalta: number | null = null;
     
     if (esDescuento) {
-      // Descontar según tipo
+      // Descontar según tipo - TODAS las faltas descuentan del total
       if (tipoFalta === 'FALTA_PERSONAL') {
         nuevasFaltas = Math.max(0, nuevasFaltas - 1);
       } else if (tipoFalta === 'FALTA_TECNICA') {
         nuevasFaltasTecnicas = Math.max(0, nuevasFaltasTecnicas - 1);
+        nuevasFaltas = Math.max(0, nuevasFaltas - 1); // También resta del total
       } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
         nuevasFaltasAntideportivas = Math.max(0, nuevasFaltasAntideportivas - 1);
+        nuevasFaltas = Math.max(0, nuevasFaltas - 1); // También resta del total
+      }
+      
+      // Al descontar, verificar si el jugador puede desbloquearse
+      // Ya no tiene 5 faltas Y ya no está descalificado por acumulación
+      const yaSinDescalificacion = !(
+        nuevasFaltasTecnicas >= 2 || 
+        nuevasFaltasAntideportivas >= 2 || 
+        (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1)
+      );
+      if (yaSinDescalificacion && !nuevoExpulsadoDirecto) {
+        quedaDescalificado = false;
       }
     } else {
-      // Sumar falta y calcular número
-      if (tipoFalta === 'FALTA_PERSONAL') {
-        nuevasFaltas += 1;
-        numeroFalta = nuevasFaltas;
-      } else if (tipoFalta === 'FALTA_TECNICA') {
+      // Sumar falta - TODAS las faltas suman al total
+      nuevasFaltas += 1;
+      numeroFalta = nuevasFaltas; // Número de falta es el total
+      
+      if (tipoFalta === 'FALTA_TECNICA') {
         nuevasFaltasTecnicas += 1;
-        numeroFalta = nuevasFaltasTecnicas;
       } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
         nuevasFaltasAntideportivas += 1;
-        numeroFalta = nuevasFaltasAntideportivas;
       } else if (tipoFalta === 'FALTA_DESCALIFICANTE') {
         nuevoExpulsadoDirecto = true;
         quedaDescalificado = true;
@@ -563,8 +576,18 @@ export function PartidoLivePage() {
     
     setProcesando(true);
     try {
+      // Registrar FIN_CUARTO (solo si no es descuento)
+      if (!modoDescontar) {
+        await registrarAccionSistema(id, 'FIN_CUARTO', partido.cuarto_actual);
+      }
+      
       // Actualizar cuarto en BD
       await cambiarCuarto(id, nuevoCuarto);
+      
+      // Registrar INICIO_CUARTO (solo si no es descuento)
+      if (!modoDescontar) {
+        await registrarAccionSistema(id, 'INICIO_CUARTO', nuevoCuarto);
+      }
       
       // Si hay que resetear tiempos, actualizar en BD también
       if (resetearTiempos) {
@@ -1354,6 +1377,9 @@ function EquipoPanel({
       onSustitucion(jugador, jugadorSaliendo);
       setModoSustitucion(false);
       setJugadorSaliendo(null);
+    } else if (modoDescontar) {
+      // En modo descontar, permitir seleccionar suplentes (incluso bloqueados)
+      onSeleccionarJugador(jugadorSeleccionado?.id === jugador.id ? null : jugador);
     }
   };
 
@@ -1530,6 +1556,10 @@ function EquipoPanel({
         {suplentes.map(jugador => {
           const eliminado = jugador.faltas >= 5 || jugador.descalificado;
           const puedeEntrar = modoSustitucion && jugadorSaliendo && !eliminado;
+          // En modo descontar, verificar si tiene algo que descontar
+          const tieneQueDescontar = jugador.faltas > 0 || jugador.faltas_tecnicas > 0 || jugador.faltas_antideportivas > 0 || jugador.puntos > 0;
+          const puedeDescontar = modoDescontar && tieneQueDescontar;
+          const estaSeleccionado = jugadorSeleccionado?.id === jugador.id;
           
           // Determinar qué mostrar: 5F, Expulsado, o GD
           const getEstadoJugador = () => {
@@ -1540,17 +1570,24 @@ function EquipoPanel({
           };
           const estadoJugador = getEstadoJugador();
           
+          // Determinar si está habilitado
+          const habilitado = puedeEntrar || puedeDescontar;
+          
           return (
             <button
               key={jugador.id}
               onClick={() => handleClickSuplente(jugador)}
-              disabled={!puedeEntrar}
+              disabled={!habilitado}
               className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
-                eliminado
-                  ? 'bg-red-900/30 border-red-800 opacity-50 cursor-not-allowed'
-                  : puedeEntrar
-                    ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
-                    : 'bg-gray-800 border-gray-700 opacity-60'
+                modoDescontar && puedeDescontar
+                  ? estaSeleccionado
+                    ? 'bg-orange-900 border-orange-500 ring-2 ring-orange-400'
+                    : 'bg-gray-700 border-orange-600 hover:border-orange-500 cursor-pointer'
+                  : eliminado
+                    ? 'bg-red-900/30 border-red-800 opacity-50 cursor-not-allowed'
+                    : puedeEntrar
+                      ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
+                      : 'bg-gray-800 border-gray-700 opacity-60'
               }`}
             >
               <div className="text-base sm:text-lg font-bold text-white">{jugador.numero_camiseta}</div>

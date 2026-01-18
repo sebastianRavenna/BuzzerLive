@@ -53,23 +53,27 @@ export async function getPartidoCompleto(partidoId: string) {
     .select('*')
     .eq('partido_id', partidoId);
 
-  // Obtener acciones de faltas para contar técnicas y antideportivas
+  // Obtener acciones de faltas para contar todas las faltas
   const { data: accionesFaltas } = await supabase
     .from('acciones')
     .select('jugador_id, tipo')
     .eq('partido_id', partidoId)
     .eq('anulada', false)
-    .in('tipo', ['FALTA_TECNICA', 'FALTA_ANTIDEPORTIVA', 'FALTA_DESCALIFICANTE']);
+    .in('tipo', ['FALTA_PERSONAL', 'FALTA_TECNICA', 'FALTA_ANTIDEPORTIVA', 'FALTA_DESCALIFICANTE']);
 
   // Mapear jugadores con sus estadísticas del partido
   const mapJugadorConStats = (jugador: Jugador): JugadorEnPartido => {
     const participacion = participaciones?.find(p => p.jugador_id === jugador.id);
     
-    // Contar faltas por tipo
+    // Contar faltas por tipo desde acciones
     const faltasJugador = accionesFaltas?.filter(a => a.jugador_id === jugador.id) || [];
     const faltas_tecnicas = faltasJugador.filter(a => a.tipo === 'FALTA_TECNICA').length;
     const faltas_antideportivas = faltasJugador.filter(a => a.tipo === 'FALTA_ANTIDEPORTIVA').length;
+    const faltas_personales = faltasJugador.filter(a => a.tipo === 'FALTA_PERSONAL').length;
     const expulsado_directo = faltasJugador.some(a => a.tipo === 'FALTA_DESCALIFICANTE');
+    
+    // Total de faltas = personales + técnicas + antideportivas
+    const faltas_totales = faltas_personales + faltas_tecnicas + faltas_antideportivas;
     
     // Descalificado si: 2 técnicas, 2 antideportivas, 1T+1A, o 1 expulsión directa
     const descalificado = expulsado_directo || 
@@ -80,7 +84,7 @@ export async function getPartidoCompleto(partidoId: string) {
     return {
       ...jugador,
       puntos: participacion?.puntos || 0,
-      faltas: participacion?.faltas || 0,
+      faltas: faltas_totales, // Ahora viene del conteo de acciones
       faltas_tecnicas,
       faltas_antideportivas,
       descalificado,
@@ -146,39 +150,44 @@ export async function registrarAccion(
     return await descontarAccion(partidoId, equipoId, jugadorId, tipo, cuarto);
   }
   
+  const timestampLocal = new Date().toISOString();
+  
   const { data, error } = await supabase.rpc('registrar_accion', {
     p_partido_id: partidoId,
     p_equipo_id: equipoId,
     p_jugador_id: jugadorId,
     p_tipo: tipo,
     p_cuarto: cuarto,
-    p_timestamp_local: new Date().toISOString(),
+    p_timestamp_local: timestampLocal,
     p_cliente_id: getClienteId(),
   });
 
   if (error) throw error;
   
   // Si hay tiros libres o número de falta, actualizar la acción recién creada
-  if (data && (tirosLibres > 0 || numeroFalta !== null)) {
-    // Buscar la última acción del jugador en este partido
-    const { data: ultimaAccion } = await supabase
+  // El RPC devuelve el ID de la acción, pero por si acaso buscamos por timestamp
+  if (tirosLibres > 0 || numeroFalta !== null) {
+    // Pequeña espera para asegurar que la acción se haya guardado
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Buscar la acción que acabamos de crear por timestamp y jugador
+    const { data: accionCreada } = await supabase
       .from('acciones')
       .select('id')
       .eq('partido_id', partidoId)
       .eq('jugador_id', jugadorId)
       .eq('tipo', tipo)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .eq('timestamp_local', timestampLocal)
       .single();
     
-    if (ultimaAccion) {
+    if (accionCreada) {
       await supabase
         .from('acciones')
         .update({ 
           tiros_libres: tirosLibres,
           numero_falta: numeroFalta
         })
-        .eq('id', ultimaAccion.id);
+        .eq('id', accionCreada.id);
     }
   }
   
@@ -406,6 +415,31 @@ export function suscribirseAPartido(
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// Registrar acción de sistema (sin equipo ni jugador) - para FIN_CUARTO, INICIO_CUARTO
+export async function registrarAccionSistema(
+  partidoId: string,
+  tipo: 'FIN_CUARTO' | 'INICIO_CUARTO',
+  cuarto: number
+) {
+  const { error } = await supabase
+    .from('acciones')
+    .insert({
+      partido_id: partidoId,
+      equipo_id: null,
+      jugador_id: null,
+      tipo: tipo,
+      cuarto: cuarto,
+      valor: cuarto, // Guardamos el número de cuarto en valor
+      timestamp_local: new Date().toISOString(),
+      cliente_id: getClienteId(),
+      anulada: false,
+    });
+  
+  if (error) {
+    console.error('Error registrando acción de sistema:', error);
+  }
 }
 
 // Generar ID único para el cliente (para sincronización)

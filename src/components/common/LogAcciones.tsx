@@ -128,36 +128,36 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const formatTipo = (accion: AccionLog): string => {
     const { tipo, valor, numero_falta, tiros_libres } = accion;
     
+    // Construir texto para faltas con número y tiros
+    const buildFaltaText = (nombre: string): string => {
+      let texto = nombre;
+      if (numero_falta) texto = `${numero_falta}ª ${nombre}`;
+      if (tiros_libres > 0) texto += ` +${tiros_libres}TL`;
+      return texto;
+    };
+    
     // Si valor es negativo, es un descuento
     if (valor < 0) {
       switch (tipo) {
         case 'PUNTO_1': return '−1';
         case 'PUNTO_2': return '−2';
         case 'PUNTO_3': return '−3';
-        case 'FALTA_PERSONAL': return '−FP';
-        case 'FALTA_TECNICA': return '−FT';
-        case 'FALTA_ANTIDEPORTIVA': return '−FA';
-        case 'FALTA_DESCALIFICANTE': return '−EXP';
+        case 'FALTA_PERSONAL': return '−F. Personal';
+        case 'FALTA_TECNICA': return '−F. Técnica';
+        case 'FALTA_ANTIDEPORTIVA': return '−F. Antideportiva';
+        case 'FALTA_DESCALIFICANTE': return '−Expulsión';
         default: return `−${tipo}`;
       }
     }
-    
-    // Construir texto para faltas con número y tiros
-    const buildFaltaText = (sigla: string): string => {
-      let texto = sigla;
-      if (numero_falta) texto = `${numero_falta}ª ${sigla}`;
-      if (tiros_libres > 0) texto += ` +${tiros_libres}TL`;
-      return texto;
-    };
     
     switch (tipo) {
       case 'PUNTO_1': return '+1';
       case 'PUNTO_2': return '+2';
       case 'PUNTO_3': return '+3';
-      case 'FALTA_PERSONAL': return buildFaltaText('FP');
-      case 'FALTA_TECNICA': return buildFaltaText('FT');
-      case 'FALTA_ANTIDEPORTIVA': return buildFaltaText('FA');
-      case 'FALTA_DESCALIFICANTE': return 'EXPULSIÓN';
+      case 'FALTA_PERSONAL': return buildFaltaText('F. Personal');
+      case 'FALTA_TECNICA': return buildFaltaText('F. Técnica');
+      case 'FALTA_ANTIDEPORTIVA': return buildFaltaText('F. Antideportiva');
+      case 'FALTA_DESCALIFICANTE': return 'Expulsión';
       case 'TIEMPO_MUERTO': return 'TIEMPO';
       case 'FIN_CUARTO': return `FIN Q${valor || ''}`;
       case 'INICIO_CUARTO': return `INICIO Q${valor || ''}`;
