@@ -23,10 +23,12 @@ import type {
   Partido, 
   Equipo, 
   JugadorEnPartido, 
-  TipoAccion 
+  TipoAccion,
+  EntrenadorEstado,
+  TipoFaltaEntrenador
 } from '../types';
 
-type Fase = 'cargando' | 'seleccion-titulares' | 'en-juego' | 'finalizado';
+type Fase = 'cargando' | 'seleccion-citados' | 'seleccion-titulares' | 'en-juego' | 'finalizado';
 
 export function PartidoLivePage() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +44,10 @@ export function PartidoLivePage() {
   // Titulares (IDs de los jugadores en cancha)
   const [titularesLocal, setTitularesLocal] = useState<Set<string>>(new Set());
   const [titularesVisitante, setTitularesVisitante] = useState<Set<string>>(new Set());
+  
+  // Citados (IDs de los 12 jugadores citados para el partido)
+  const [citadosLocal, setCitadosLocal] = useState<Set<string>>(new Set());
+  const [citadosVisitante, setCitadosVisitante] = useState<Set<string>>(new Set());
   
   // Estado de UI
   const [fase, setFase] = useState<Fase>('cargando');
@@ -75,6 +81,22 @@ export function PartidoLivePage() {
   const [ultimos2MinLocal, setUltimos2MinLocal] = useState(false);
   const [ultimos2MinVisitante, setUltimos2MinVisitante] = useState(false);
   
+  // Estado del entrenador
+  const [entrenadorLocal, setEntrenadorLocal] = useState<EntrenadorEstado>({
+    faltasTecnicasEntrenador: 0,
+    faltasTecnicasBanco: 0,
+    expulsadoDirecto: false,
+    descalificado: false,
+  });
+  const [entrenadorVisitante, setEntrenadorVisitante] = useState<EntrenadorEstado>({
+    faltasTecnicasEntrenador: 0,
+    faltasTecnicasBanco: 0,
+    expulsadoDirecto: false,
+    descalificado: false,
+  });
+  const [mostrarModalEntrenador, setMostrarModalEntrenador] = useState(false);
+  const [entrenadorEsLocal, setEntrenadorEsLocal] = useState(true);
+  
   // Estado de conexión y cola offline
   const [online, setOnline] = useState(isOnline());
   const [pendientes, setPendientes] = useState(getOfflineQueue().length);
@@ -94,7 +116,26 @@ export function PartidoLivePage() {
         setJugadoresVisitante(data.jugadoresVisitante);
         
         if (data.partido.estado === 'PROGRAMADO') {
-          setFase('seleccion-titulares');
+          // Verificar si algún equipo tiene más de 12 jugadores
+          const necesitaCitadosLocal = data.jugadoresLocal.length > 12;
+          const necesitaCitadosVisitante = data.jugadoresVisitante.length > 12;
+          
+          if (necesitaCitadosLocal || necesitaCitadosVisitante) {
+            // Ir a selección de citados
+            setFase('seleccion-citados');
+            // Si un equipo tiene ≤12, marcar todos como citados automáticamente
+            if (!necesitaCitadosLocal) {
+              setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
+            }
+            if (!necesitaCitadosVisitante) {
+              setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
+            }
+          } else {
+            // Todos los jugadores son citados automáticamente
+            setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
+            setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
+            setFase('seleccion-titulares');
+          }
         } else if (data.partido.estado === 'EN_CURSO') {
           // Recuperar titulares usando es_titular de la BD
           // Si no hay marcados como titular, usar los que participaron
@@ -120,6 +161,11 @@ export function PartidoLivePage() {
             }
             return ids;
           };
+          
+          // Los citados son todos los que participaron o están marcados
+          // (para partidos ya en curso, tomamos los primeros 12 o todos si son menos)
+          setCitadosLocal(new Set(data.jugadoresLocal.slice(0, 12).map(j => j.id)));
+          setCitadosVisitante(new Set(data.jugadoresVisitante.slice(0, 12).map(j => j.id)));
           
           setTitularesLocal(obtenerTitulares(data.jugadoresLocal));
           setTitularesVisitante(obtenerTitulares(data.jugadoresVisitante));
@@ -401,17 +447,22 @@ export function PartidoLivePage() {
       } else if (tipoFalta === 'FALTA_ANTIDEPORTIVA') {
         nuevasFaltasAntideportivas = Math.max(0, nuevasFaltasAntideportivas - 1);
         nuevasFaltas = Math.max(0, nuevasFaltas - 1); // También resta del total
+      } else if (tipoFalta === 'FALTA_DESCALIFICANTE') {
+        nuevoExpulsadoDirecto = false;
+        quedaDescalificado = false;
       }
       
       // Al descontar, verificar si el jugador puede desbloquearse
       // Ya no tiene 5 faltas Y ya no está descalificado por acumulación
-      const yaSinDescalificacion = !(
-        nuevasFaltasTecnicas >= 2 || 
-        nuevasFaltasAntideportivas >= 2 || 
-        (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1)
-      );
-      if (yaSinDescalificacion && !nuevoExpulsadoDirecto) {
-        quedaDescalificado = false;
+      if (tipoFalta !== 'FALTA_DESCALIFICANTE') {
+        const yaSinDescalificacion = !(
+          nuevasFaltasTecnicas >= 2 || 
+          nuevasFaltasAntideportivas >= 2 || 
+          (nuevasFaltasTecnicas >= 1 && nuevasFaltasAntideportivas >= 1)
+        );
+        if (yaSinDescalificacion && !nuevoExpulsadoDirecto) {
+          quedaDescalificado = false;
+        }
       }
     } else {
       // Sumar falta - TODAS las faltas suman al total
@@ -559,9 +610,102 @@ export function PartidoLivePage() {
     }
   };
 
+  // Manejar falta al entrenador
+  const handleFaltaEntrenador = async (
+    tipoFalta: TipoFaltaEntrenador,
+    esDescuento: boolean = false
+  ) => {
+    if (!id || !partido) return;
+    
+    const esLocal = entrenadorEsLocal;
+    const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
+    if (!equipoId) return;
+    
+    const entrenador = esLocal ? entrenadorLocal : entrenadorVisitante;
+    const setEntrenador = esLocal ? setEntrenadorLocal : setEntrenadorVisitante;
+    
+    // Calcular nuevos valores
+    let nuevosFTEntrenador = entrenador.faltasTecnicasEntrenador;
+    let nuevosFTBanco = entrenador.faltasTecnicasBanco;
+    let nuevoExpulsado = entrenador.expulsadoDirecto;
+    let nuevoDescalificado = entrenador.descalificado;
+    
+    if (esDescuento) {
+      if (tipoFalta === 'FALTA_TECNICA_ENTRENADOR') {
+        nuevosFTEntrenador = Math.max(0, nuevosFTEntrenador - 1);
+      } else if (tipoFalta === 'FALTA_TECNICA_BANCO') {
+        nuevosFTBanco = Math.max(0, nuevosFTBanco - 1);
+      } else if (tipoFalta === 'FALTA_DESCALIFICANTE_ENTRENADOR') {
+        nuevoExpulsado = false;
+        nuevoDescalificado = false;
+      }
+      
+      // Verificar si puede desbloquearse
+      if (!nuevoExpulsado) {
+        const totalFT = nuevosFTEntrenador + nuevosFTBanco;
+        if (nuevosFTEntrenador < 2 && totalFT < 3) {
+          nuevoDescalificado = false;
+        }
+      }
+    } else {
+      if (tipoFalta === 'FALTA_TECNICA_ENTRENADOR') {
+        nuevosFTEntrenador += 1;
+      } else if (tipoFalta === 'FALTA_TECNICA_BANCO') {
+        nuevosFTBanco += 1;
+      } else if (tipoFalta === 'FALTA_DESCALIFICANTE_ENTRENADOR') {
+        nuevoExpulsado = true;
+        nuevoDescalificado = true;
+      }
+      
+      // Reglas de descalificación:
+      // - 2 F.T. al Entrenador
+      // - Suma de 3 F.T. (banco + entrenador)
+      const totalFT = nuevosFTEntrenador + nuevosFTBanco;
+      if (nuevosFTEntrenador >= 2 || totalFT >= 3) {
+        nuevoDescalificado = true;
+      }
+    }
+    
+    // Actualizar estado local
+    setEntrenador({
+      faltasTecnicasEntrenador: nuevosFTEntrenador,
+      faltasTecnicasBanco: nuevosFTBanco,
+      expulsadoDirecto: nuevoExpulsado,
+      descalificado: nuevoDescalificado,
+    });
+    
+    setMostrarModalEntrenador(false);
+    if (esDescuento) setModoDescontar(false);
+    
+    // Mostrar alerta si quedó descalificado
+    if (nuevoDescalificado && !entrenador.descalificado && !esDescuento) {
+      setJugadorAlerta('ENTRENADOR');
+      setTipoAlerta(nuevoExpulsado ? 'EXPULSADO' : 'DESCALIFICADO');
+      setMostrarAlertaFalta(true);
+    }
+    
+    // Registrar en la BD
+    if (online) {
+      setProcesando(true);
+      try {
+        await registrarAccion(id, equipoId, null, tipoFalta, partido.cuarto_actual, esDescuento);
+      } catch (err) {
+        console.error('Error registrando falta de entrenador:', err);
+      } finally {
+        setProcesando(false);
+      }
+    }
+  };
+
+  // Abrir modal de falta al entrenador
+  const abrirModalEntrenador = (esLocal: boolean) => {
+    setEntrenadorEsLocal(esLocal);
+    setMostrarModalEntrenador(true);
+  };
+
   // Cambiar cuarto
   const handleCambiarCuarto = async () => {
-    if (!id || !partido) return;
+    if (!id || !partido || !equipoLocal) return;
     
     const nuevoCuarto = modoDescontar 
       ? Math.max(1, partido.cuarto_actual - 1)
@@ -578,7 +722,7 @@ export function PartidoLivePage() {
     try {
       // Registrar FIN_CUARTO (solo si no es descuento)
       if (!modoDescontar) {
-        await registrarAccionSistema(id, 'FIN_CUARTO', partido.cuarto_actual);
+        await registrarAccionSistema(id, equipoLocal.id, 'FIN_CUARTO', partido.cuarto_actual);
       }
       
       // Actualizar cuarto en BD
@@ -586,7 +730,7 @@ export function PartidoLivePage() {
       
       // Registrar INICIO_CUARTO (solo si no es descuento)
       if (!modoDescontar) {
-        await registrarAccionSistema(id, 'INICIO_CUARTO', nuevoCuarto);
+        await registrarAccionSistema(id, equipoLocal.id, 'INICIO_CUARTO', nuevoCuarto);
       }
       
       // Si hay que resetear tiempos, actualizar en BD también
@@ -676,11 +820,11 @@ export function PartidoLivePage() {
     }
   };
 
-  // Componentes auxiliares
+  // Componentes auxiliares - filtrar solo jugadores citados
   const jugadoresTitularesLocal = jugadoresLocal.filter(j => titularesLocal.has(j.id));
-  const jugadoresSuplentesLocal = jugadoresLocal.filter(j => !titularesLocal.has(j.id));
+  const jugadoresSuplentesLocal = jugadoresLocal.filter(j => citadosLocal.has(j.id) && !titularesLocal.has(j.id));
   const jugadoresTitularesVisitante = jugadoresVisitante.filter(j => titularesVisitante.has(j.id));
-  const jugadoresSuplentesVisitante = jugadoresVisitante.filter(j => !titularesVisitante.has(j.id));
+  const jugadoresSuplentesVisitante = jugadoresVisitante.filter(j => citadosVisitante.has(j.id) && !titularesVisitante.has(j.id));
 
   // === RENDER ===
 
@@ -724,6 +868,132 @@ export function PartidoLivePage() {
     );
   }
 
+  // Función para toggle de citado
+  const toggleCitado = (jugadorId: string, esLocal: boolean) => {
+    const setCitados = esLocal ? setCitadosLocal : setCitadosVisitante;
+    const citados = esLocal ? citadosLocal : citadosVisitante;
+    
+    const nuevosCitados = new Set(citados);
+    if (nuevosCitados.has(jugadorId)) {
+      nuevosCitados.delete(jugadorId);
+    } else if (nuevosCitados.size < 12) {
+      nuevosCitados.add(jugadorId);
+    }
+    setCitados(nuevosCitados);
+  };
+
+  // Selección de citados (12 por equipo)
+  if (fase === 'seleccion-citados') {
+    const localNecesitaSeleccion = jugadoresLocal.length > 12;
+    const visitanteNecesitaSeleccion = jugadoresVisitante.length > 12;
+    const puedeAvanzar = citadosLocal.size === 12 && citadosVisitante.size === 12;
+    
+    return (
+      <div className="min-h-screen bg-gray-900 p-4">
+        {/* Botón volver */}
+        <button
+          onClick={() => navigate('/partidos')}
+          className="mb-4 inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Volver a partidos
+        </button>
+        
+        <h1 className="text-2xl font-bold text-white text-center mb-2">
+          Seleccionar Citados (12 por equipo)
+        </h1>
+        <p className="text-gray-400 text-center mb-6">
+          Seleccione los 12 jugadores que participarán del partido
+        </p>
+        
+        <div className="grid grid-cols-2 gap-8 max-w-6xl mx-auto">
+          {/* Equipo Local */}
+          <div>
+            <h2 className="text-xl font-bold text-white mb-4 text-center">
+              {equipoLocal.nombre_corto || equipoLocal.nombre}
+              <span className={`ml-2 text-sm ${citadosLocal.size === 12 ? 'text-green-400' : 'text-gray-400'}`}>
+                ({citadosLocal.size}/12)
+              </span>
+            </h2>
+            {localNecesitaSeleccion ? (
+              <div className="grid grid-cols-4 gap-2">
+                {jugadoresLocal.map(jugador => (
+                  <button
+                    key={jugador.id}
+                    onClick={() => toggleCitado(jugador.id, true)}
+                    disabled={!citadosLocal.has(jugador.id) && citadosLocal.size >= 12}
+                    className={`p-2 rounded-xl border-2 transition-all ${
+                      citadosLocal.has(jugador.id)
+                        ? 'bg-green-900 border-green-500 ring-2 ring-green-400'
+                        : citadosLocal.size >= 12
+                          ? 'bg-gray-800 border-gray-700 opacity-50 cursor-not-allowed'
+                          : 'bg-gray-800 border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="text-xl font-bold text-white">{jugador.numero_camiseta}</div>
+                    <div className="text-[10px] text-gray-400 truncate">{jugador.apellido}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-green-400 py-4">
+                ✓ Todos los jugadores citados automáticamente
+              </div>
+            )}
+          </div>
+          
+          {/* Equipo Visitante */}
+          <div>
+            <h2 className="text-xl font-bold text-white mb-4 text-center">
+              {equipoVisitante.nombre_corto || equipoVisitante.nombre}
+              <span className={`ml-2 text-sm ${citadosVisitante.size === 12 ? 'text-green-400' : 'text-gray-400'}`}>
+                ({citadosVisitante.size}/12)
+              </span>
+            </h2>
+            {visitanteNecesitaSeleccion ? (
+              <div className="grid grid-cols-4 gap-2">
+                {jugadoresVisitante.map(jugador => (
+                  <button
+                    key={jugador.id}
+                    onClick={() => toggleCitado(jugador.id, false)}
+                    disabled={!citadosVisitante.has(jugador.id) && citadosVisitante.size >= 12}
+                    className={`p-2 rounded-xl border-2 transition-all ${
+                      citadosVisitante.has(jugador.id)
+                        ? 'bg-green-900 border-green-500 ring-2 ring-green-400'
+                        : citadosVisitante.size >= 12
+                          ? 'bg-gray-800 border-gray-700 opacity-50 cursor-not-allowed'
+                          : 'bg-gray-800 border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="text-xl font-bold text-white">{jugador.numero_camiseta}</div>
+                    <div className="text-[10px] text-gray-400 truncate">{jugador.apellido}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-green-400 py-4">
+                ✓ Todos los jugadores citados automáticamente
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Botón continuar */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => setFase('seleccion-titulares')}
+            disabled={!puedeAvanzar}
+            className="px-12 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xl font-bold rounded-xl transition-colors"
+          >
+            Continuar → Seleccionar Titulares
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Selección de titulares
   if (fase === 'seleccion-titulares') {
     return (
@@ -751,7 +1021,7 @@ export function PartidoLivePage() {
               <span className="ml-2 text-sm text-gray-400">({titularesLocal.size}/5)</span>
             </h2>
             <div className="grid grid-cols-3 gap-2">
-              {jugadoresLocal.map(jugador => (
+              {jugadoresLocal.filter(j => citadosLocal.has(j.id)).map(jugador => (
                 <div
                   key={jugador.id}
                   className={`p-3 rounded-xl border-2 transition-all relative ${
@@ -789,7 +1059,7 @@ export function PartidoLivePage() {
               <span className="ml-2 text-sm text-gray-400">({titularesVisitante.size}/5)</span>
             </h2>
             <div className="grid grid-cols-3 gap-2">
-              {jugadoresVisitante.map(jugador => (
+              {jugadoresVisitante.filter(j => citadosVisitante.has(j.id)).map(jugador => (
                 <div
                   key={jugador.id}
                   className={`p-3 rounded-xl border-2 transition-all relative ${
@@ -1023,6 +1293,40 @@ export function PartidoLivePage() {
           </button>
         </div>
         
+        {/* Botones falta al entrenador */}
+        <div className="mt-3 flex justify-center gap-4">
+          <button
+            onClick={() => abrirModalEntrenador(true)}
+            disabled={procesando}
+            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
+              entrenadorLocal.descalificado
+                ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            👔 {equipoLocal?.nombre_corto} DT
+            {entrenadorLocal.descalificado && ' (GD)'}
+            {!entrenadorLocal.descalificado && (entrenadorLocal.faltasTecnicasEntrenador + entrenadorLocal.faltasTecnicasBanco > 0) && 
+              ` (${entrenadorLocal.faltasTecnicasEntrenador + entrenadorLocal.faltasTecnicasBanco}T)`
+            }
+          </button>
+          <button
+            onClick={() => abrirModalEntrenador(false)}
+            disabled={procesando}
+            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
+              entrenadorVisitante.descalificado
+                ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            👔 {equipoVisitante?.nombre_corto} DT
+            {entrenadorVisitante.descalificado && ' (GD)'}
+            {!entrenadorVisitante.descalificado && (entrenadorVisitante.faltasTecnicasEntrenador + entrenadorVisitante.faltasTecnicasBanco > 0) && 
+              ` (${entrenadorVisitante.faltasTecnicasEntrenador + entrenadorVisitante.faltasTecnicasBanco}T)`
+            }
+          </button>
+        </div>
+        
         {/* Log de últimas acciones */}
         <div className="mt-3 sm:mt-6">
           <LogAcciones 
@@ -1153,48 +1457,46 @@ export function PartidoLivePage() {
             <div className="mb-4">
               <label className="block text-gray-300 text-sm mb-2">Tipo de falta:</label>
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  { tipo: 'FALTA_PERSONAL', label: 'Personal', color: 'blue' },
-                  { tipo: 'FALTA_TECNICA', label: 'Técnica', color: 'yellow' },
-                  { tipo: 'FALTA_ANTIDEPORTIVA', label: 'Antideportiva', color: 'orange' },
-                  ...(!modoDescontar ? [{ tipo: 'FALTA_DESCALIFICANTE', label: 'Expulsión', color: 'red' }] : []),
-                ].map(({ tipo, label, color }) => {
-                  // En modo descontar, deshabilitar si no tiene ese tipo de falta
+                {(() => {
                   const jugador = faltaEsLocal ? jugadorSeleccionadoLocal : jugadorSeleccionadoVisitante;
-                  let deshabilitado = false;
-                  if (modoDescontar && jugador) {
-                    if (tipo === 'FALTA_PERSONAL' && jugador.faltas <= 0) deshabilitado = true;
-                    if (tipo === 'FALTA_TECNICA' && jugador.faltas_tecnicas <= 0) deshabilitado = true;
-                    if (tipo === 'FALTA_ANTIDEPORTIVA' && jugador.faltas_antideportivas <= 0) deshabilitado = true;
-                  }
+                  // Calcular faltas personales (total - técnicas - antideportivas)
+                  const faltasPersonales = jugador ? jugador.faltas - jugador.faltas_tecnicas - jugador.faltas_antideportivas : 0;
                   
-                  return (
-                    <button
-                      key={tipo}
-                      onClick={() => setTipoFaltaSeleccionado(tipo as typeof tipoFaltaSeleccionado)}
-                      disabled={deshabilitado}
-                      className={`py-3 px-4 rounded-lg font-medium text-sm transition-all ${
-                        deshabilitado
-                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                          : tipoFaltaSeleccionado === tipo
-                            ? color === 'blue' ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-                            : color === 'yellow' ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
-                            : color === 'orange' ? 'bg-orange-600 text-white ring-2 ring-orange-400'
-                            : 'bg-red-600 text-white ring-2 ring-red-400'
-                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      {label}
-                      {modoDescontar && jugador && (
-                        <span className="ml-1 text-xs opacity-70">
-                          ({tipo === 'FALTA_PERSONAL' ? jugador.faltas 
-                            : tipo === 'FALTA_TECNICA' ? jugador.faltas_tecnicas 
-                            : jugador.faltas_antideportivas})
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                  const tiposFalta = [
+                    { tipo: 'FALTA_PERSONAL', label: 'Personal', color: 'blue', cantidad: faltasPersonales },
+                    { tipo: 'FALTA_TECNICA', label: 'Técnica', color: 'yellow', cantidad: jugador?.faltas_tecnicas || 0 },
+                    { tipo: 'FALTA_ANTIDEPORTIVA', label: 'Antideportiva', color: 'orange', cantidad: jugador?.faltas_antideportivas || 0 },
+                    { tipo: 'FALTA_DESCALIFICANTE', label: 'Expulsión', color: 'red', cantidad: jugador?.expulsado_directo ? 1 : 0 },
+                  ];
+                  
+                  return tiposFalta.map(({ tipo, label, color, cantidad }) => {
+                    // En modo descontar, deshabilitar si no tiene ese tipo de falta
+                    const deshabilitado = modoDescontar && cantidad <= 0;
+                    
+                    return (
+                      <button
+                        key={tipo}
+                        onClick={() => setTipoFaltaSeleccionado(tipo as typeof tipoFaltaSeleccionado)}
+                        disabled={deshabilitado}
+                        className={`py-3 px-4 rounded-lg font-medium text-sm transition-all ${
+                          deshabilitado
+                            ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                            : tipoFaltaSeleccionado === tipo
+                              ? color === 'blue' ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                              : color === 'yellow' ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
+                              : color === 'orange' ? 'bg-orange-600 text-white ring-2 ring-orange-400'
+                              : 'bg-red-600 text-white ring-2 ring-red-400'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        }`}
+                      >
+                        {label}
+                        {modoDescontar && (
+                          <span className="ml-1 text-xs opacity-70">({cantidad})</span>
+                        )}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
             
@@ -1282,14 +1584,14 @@ export function PartidoLivePage() {
             {tipoAlerta === 'EXPULSADO' && (
               <>
                 <div className="text-6xl mb-4">🚫</div>
-                <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR EXPULSADO</h2>
+                <h2 className="text-xl font-bold text-red-500 mb-2">{jugadorAlerta === 'ENTRENADOR' ? 'ENTRENADOR EXPULSADO' : 'JUGADOR EXPULSADO'}</h2>
                 <p className="text-gray-400 text-sm mb-2">Expulsión directa</p>
               </>
             )}
             {tipoAlerta === 'DESCALIFICADO' && (
               <>
                 <div className="text-6xl mb-4">❌</div>
-                <h2 className="text-xl font-bold text-red-500 mb-2">JUGADOR DESCALIFICADO</h2>
+                <h2 className="text-xl font-bold text-red-500 mb-2">{jugadorAlerta === 'ENTRENADOR' ? 'ENTRENADOR DESCALIFICADO' : 'JUGADOR DESCALIFICADO'}</h2>
                 <p className="text-gray-400 text-sm mb-2">Por acumulación de faltas</p>
               </>
             )}
@@ -1299,6 +1601,100 @@ export function PartidoLivePage() {
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl"
             >
               Continuar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal falta al entrenador */}
+      {mostrarModalEntrenador && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold text-white mb-2 text-center">
+              {modoDescontar ? 'Descontar Falta al Entrenador' : 'Falta al Entrenador'}
+            </h2>
+            <p className="text-gray-400 mb-4 text-center text-sm">
+              {entrenadorEsLocal ? equipoLocal?.nombre_corto : equipoVisitante?.nombre_corto}
+            </p>
+            
+            {/* Estado actual del entrenador */}
+            {(() => {
+              const entrenador = entrenadorEsLocal ? entrenadorLocal : entrenadorVisitante;
+              return (
+                <div className="mb-4 p-3 bg-gray-700 rounded-lg text-center">
+                  <div className="text-sm text-gray-400">Estado actual:</div>
+                  {entrenador.descalificado ? (
+                    <div className="text-red-500 font-bold">
+                      {entrenador.expulsadoDirecto ? 'EXPULSADO' : 'DESCALIFICADO (GD)'}
+                    </div>
+                  ) : (
+                    <div className="flex justify-center gap-4 mt-1">
+                      <span className="text-yellow-400">T.Entrenador: {entrenador.faltasTecnicasEntrenador}</span>
+                      <span className="text-orange-400">T.Banco: {entrenador.faltasTecnicasBanco}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            
+            {/* Tipos de falta */}
+            <div className="grid grid-cols-1 gap-2 mb-6">
+              {(() => {
+                const entrenador = entrenadorEsLocal ? entrenadorLocal : entrenadorVisitante;
+                const tiposFalta = [
+                  { 
+                    tipo: 'FALTA_TECNICA_ENTRENADOR' as TipoFaltaEntrenador, 
+                    label: 'T. al Entrenador', 
+                    color: 'yellow',
+                    cantidad: entrenador.faltasTecnicasEntrenador 
+                  },
+                  { 
+                    tipo: 'FALTA_TECNICA_BANCO' as TipoFaltaEntrenador, 
+                    label: 'T. al Banco', 
+                    color: 'orange',
+                    cantidad: entrenador.faltasTecnicasBanco 
+                  },
+                  { 
+                    tipo: 'FALTA_DESCALIFICANTE_ENTRENADOR' as TipoFaltaEntrenador, 
+                    label: 'Expulsión', 
+                    color: 'red',
+                    cantidad: entrenador.expulsadoDirecto ? 1 : 0 
+                  },
+                ];
+                
+                return tiposFalta.map(({ tipo, label, color, cantidad }) => {
+                  const deshabilitado = modoDescontar 
+                    ? cantidad <= 0 
+                    : entrenador.descalificado;
+                  
+                  return (
+                    <button
+                      key={tipo}
+                      onClick={() => {
+                        handleFaltaEntrenador(tipo, modoDescontar);
+                      }}
+                      disabled={deshabilitado}
+                      className={`py-3 px-4 rounded-lg font-medium text-sm transition-all ${
+                        deshabilitado
+                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                          : color === 'yellow' ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                          : color === 'orange' ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                          : 'bg-red-600 hover:bg-red-700 text-white'
+                      }`}
+                    >
+                      {label}
+                      {modoDescontar && <span className="ml-2 opacity-70">({cantidad})</span>}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            
+            <button
+              onClick={() => setMostrarModalEntrenador(false)}
+              className="w-full py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl"
+            >
+              Cancelar
             </button>
           </div>
         </div>

@@ -24,7 +24,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [acciones, setAcciones] = useState<AccionLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Cargar acciones iniciales
+  // Cargar acciones iniciales (TODAS)
   useEffect(() => {
     async function cargarAcciones() {
       const { data, error } = await supabase
@@ -42,8 +42,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         `)
         .eq('partido_id', partidoId)
         .eq('anulada', false)
-        .order('timestamp_local', { ascending: false })
-        .limit(10);
+        .order('timestamp_local', { ascending: false });
+        // Sin .limit() - trae todas las acciones
 
       if (error) {
         console.error('Error cargando acciones:', error);
@@ -114,7 +114,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               numero_falta: data.numero_falta || null,
             };
             
-            setAcciones(prev => [nuevaAccion, ...prev].slice(0, 10));
+            // Agregar al principio sin límite
+            setAcciones(prev => [nuevaAccion, ...prev]);
           }
         }
       )
@@ -146,6 +147,9 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         case 'FALTA_TECNICA': return '−F. Técnica';
         case 'FALTA_ANTIDEPORTIVA': return '−F. Antideportiva';
         case 'FALTA_DESCALIFICANTE': return '−Expulsión';
+        case 'FALTA_TECNICA_ENTRENADOR': return '−T. Entrenador';
+        case 'FALTA_TECNICA_BANCO': return '−T. Banco';
+        case 'FALTA_DESCALIFICANTE_ENTRENADOR': return '−Expulsión DT';
         default: return `−${tipo}`;
       }
     }
@@ -158,6 +162,9 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       case 'FALTA_TECNICA': return buildFaltaText('F. Técnica');
       case 'FALTA_ANTIDEPORTIVA': return buildFaltaText('F. Antideportiva');
       case 'FALTA_DESCALIFICANTE': return 'Expulsión';
+      case 'FALTA_TECNICA_ENTRENADOR': return 'T. Entrenador';
+      case 'FALTA_TECNICA_BANCO': return 'T. Banco';
+      case 'FALTA_DESCALIFICANTE_ENTRENADOR': return 'Expulsión DT';
       case 'TIEMPO_MUERTO': return 'TIEMPO';
       case 'FIN_CUARTO': return `FIN Q${valor || ''}`;
       case 'INICIO_CUARTO': return `INICIO Q${valor || ''}`;
@@ -174,6 +181,9 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     if (tipo === 'FALTA_TECNICA') return 'text-yellow-400';
     if (tipo === 'FALTA_ANTIDEPORTIVA') return 'text-orange-500';
     if (tipo === 'FALTA_DESCALIFICANTE') return 'text-red-600 font-bold';
+    if (tipo === 'FALTA_TECNICA_ENTRENADOR') return 'text-yellow-300';
+    if (tipo === 'FALTA_TECNICA_BANCO') return 'text-orange-400';
+    if (tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR') return 'text-red-600 font-bold';
     if (tipo === 'TIEMPO_MUERTO') return 'text-purple-400';
     if (tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO') return 'text-blue-400 font-bold';
     return 'text-gray-400';
@@ -204,10 +214,10 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     <div className={`${compact ? '' : 'bg-gray-800/50 rounded-xl p-4'}`}>
       {!compact && (
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">
-          Últimas Acciones
+          Acciones del Partido
         </h3>
       )}
-      <div className={`space-y-1.5 ${compact ? 'max-h-32' : 'max-h-48'} overflow-y-auto`}>
+      <div className={`space-y-1.5 ${compact ? 'max-h-32' : 'max-h-[400px]'} overflow-y-auto`}>
         {acciones.map((accion) => (
           <div 
             key={accion.id} 

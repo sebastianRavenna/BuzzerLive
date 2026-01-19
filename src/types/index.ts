@@ -14,11 +14,24 @@ export type TipoAccion =
   | 'FALTA_TECNICA' 
   | 'FALTA_ANTIDEPORTIVA' 
   | 'FALTA_DESCALIFICANTE'
+  | 'FALTA_TECNICA_ENTRENADOR'
+  | 'FALTA_TECNICA_BANCO'
+  | 'FALTA_DESCALIFICANTE_ENTRENADOR'
   | 'TIEMPO_MUERTO'
   | 'INICIO_CUARTO'
   | 'FIN_CUARTO';
 
 export type TipoFalta = 'FALTA_PERSONAL' | 'FALTA_TECNICA' | 'FALTA_ANTIDEPORTIVA' | 'FALTA_DESCALIFICANTE';
+
+export type TipoFaltaEntrenador = 'FALTA_TECNICA_ENTRENADOR' | 'FALTA_TECNICA_BANCO' | 'FALTA_DESCALIFICANTE_ENTRENADOR';
+
+// Estado del entrenador
+export interface EntrenadorEstado {
+  faltasTecnicasEntrenador: number;
+  faltasTecnicasBanco: number;
+  expulsadoDirecto: boolean;
+  descalificado: boolean;
+}
 
 // Base entity interface
 export interface BaseEntity {

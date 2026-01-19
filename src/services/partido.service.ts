@@ -215,12 +215,14 @@ async function descontarAccion(
   
   // Calcular valor a descontar
   let valorPunto = 0;
-  let valorFalta = 0;
+  let esFalta = false;
   
   if (tipo === 'PUNTO_1') valorPunto = 1;
   else if (tipo === 'PUNTO_2') valorPunto = 2;
   else if (tipo === 'PUNTO_3') valorPunto = 3;
-  else if (tipo === 'FALTA_PERSONAL') valorFalta = 1;
+  else if (tipo === 'FALTA_PERSONAL' || tipo === 'FALTA_TECNICA' || tipo === 'FALTA_ANTIDEPORTIVA' || tipo === 'FALTA_DESCALIFICANTE') {
+    esFalta = true;
+  }
   
   // Actualizar partido
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -233,7 +235,8 @@ async function descontarAccion(
     }
   }
   
-  if (valorFalta > 0) {
+  // Solo descontar falta de equipo para falta personal
+  if (tipo === 'FALTA_PERSONAL') {
     const faltasKey = esLocal ? 'faltas_equipo_local' : 'faltas_equipo_visitante';
     const faltasActuales = [...(partido[faltasKey] || [0, 0, 0, 0, 0, 0])];
     const idx = Math.max(0, cuarto - 1);
@@ -248,8 +251,8 @@ async function descontarAccion(
   
   if (errorUpdate) throw errorUpdate;
   
-  // Actualizar participación del jugador si aplica
-  if (jugadorId && (valorPunto > 0 || valorFalta > 0)) {
+  // Actualizar participación del jugador si aplica (solo para puntos y falta personal)
+  if (jugadorId && (valorPunto > 0 || tipo === 'FALTA_PERSONAL')) {
     const { data: participacion } = await supabase
       .from('participaciones_partido')
       .select('*')
@@ -262,7 +265,7 @@ async function descontarAccion(
       if (valorPunto > 0) {
         updatesPart.puntos = Math.max(0, participacion.puntos - valorPunto);
       }
-      if (valorFalta > 0) {
+      if (tipo === 'FALTA_PERSONAL') {
         updatesPart.faltas = Math.max(0, participacion.faltas - 1);
       }
       
@@ -274,9 +277,9 @@ async function descontarAccion(
   }
   
   // Registrar la acción de descuento en el log (con valor negativo)
-  const valorNegativo = valorPunto > 0 ? -valorPunto : valorFalta > 0 ? -1 : 0;
+  const valorNegativo = valorPunto > 0 ? -valorPunto : esFalta ? -1 : 0;
   
-  await supabase
+  const { error: errorInsert } = await supabase
     .from('acciones')
     .insert({
       partido_id: partidoId,
@@ -289,6 +292,10 @@ async function descontarAccion(
       cliente_id: getClienteId(),
       anulada: false,
     });
+  
+  if (errorInsert) {
+    console.error('Error insertando descuento en log:', errorInsert);
+  }
   
   return true;
 }
@@ -417,9 +424,10 @@ export function suscribirseAPartido(
   };
 }
 
-// Registrar acción de sistema (sin equipo ni jugador) - para FIN_CUARTO, INICIO_CUARTO
+// Registrar acción de sistema (cambio de cuarto) - usa equipo local como referencia
 export async function registrarAccionSistema(
   partidoId: string,
+  equipoId: string,
   tipo: 'FIN_CUARTO' | 'INICIO_CUARTO',
   cuarto: number
 ) {
@@ -427,7 +435,7 @@ export async function registrarAccionSistema(
     .from('acciones')
     .insert({
       partido_id: partidoId,
-      equipo_id: null,
+      equipo_id: equipoId, // Usamos equipo local como referencia
       jugador_id: null,
       tipo: tipo,
       cuarto: cuarto,
@@ -439,6 +447,7 @@ export async function registrarAccionSistema(
   
   if (error) {
     console.error('Error registrando acción de sistema:', error);
+    throw error;
   }
 }
 
