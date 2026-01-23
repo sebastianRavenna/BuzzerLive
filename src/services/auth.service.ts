@@ -72,12 +72,13 @@ async function loadUserData(authId: string): Promise<Usuario | null> {
     .select(`
       *,
       organizacion:organizaciones(
-        id, nombre, slug, logo_url, plan,
-        limite_torneos, limite_clubes, limite_jugadores,
+        id, nombre, slug, plan, 
+        limite_torneos, limite_clubes, limite_jugadores, 
         torneos_count, clubes_count, jugadores_count
       ),
-      club:equipos(id, nombre, nombre_corto, logo_url)
+      club:equipos(id, nombre, nombre_corto)
     `)
+    // Se quitó logo_url de aquí de organizacion porque no existe en la tabla organizaciones y de club:equipos
     .eq('auth_id', authId)
     .single();
 
