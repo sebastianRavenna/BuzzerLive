@@ -6,6 +6,7 @@ export interface Torneo {
   nombre: string;
   tipo: 'liga' | 'copa' | 'liga_copa';
   estado: 'programado' | 'en_curso' | 'finalizado' | 'suspendido';
+  temporada: string;
   fecha_inicio: string | null;
   fecha_fin: string | null;
   categoria: string | null;
@@ -104,6 +105,7 @@ export async function createTorneo(
       nombre: input.nombre,
       tipo: input.tipo,
       estado: 'programado',
+      temporada: new Date().getFullYear().toString(),
       categoria: input.categoria || null,
       fecha_inicio: input.fecha_inicio || null,
       fecha_fin: input.fecha_fin || null,
