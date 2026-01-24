@@ -80,7 +80,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
         {/* Botón Login/Panel */}
         <button
           onClick={handleLoginClick}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105"
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105 cursor-pointer"
         >
           {user ? (
             <>👤 Ir a Mi Panel <span className="ml-2 text-sm opacity-75">({user.rol})</span></>

@@ -236,9 +236,9 @@ export default function AdminPage() {
             <div key={t.id} className="bg-gray-800 rounded-xl p-4 flex justify-between items-center">
               <div><h3 className="text-xl font-bold text-white">{t.nombre} <span className={`ml-2 px-2 py-0.5 rounded text-xs ${t.estado === 'en_curso' ? 'bg-green-600' : 'bg-blue-600'} text-white`}>{t.estado}</span></h3><p className="text-gray-400 text-sm">{t.categoria} {t.fecha_inicio && `· ${new Date(t.fecha_inicio).toLocaleDateString()}`}</p></div>
               <div className="flex gap-2">
-                <button onClick={() => openTorneoEquipos(t)} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">⚙️ Equipos</button>
-                <button onClick={() => openEditTorneo(t)} className="px-3 py-1.5 bg-gray-600 text-white rounded text-sm">✏️</button>
-                <button onClick={() => handleDeleteTorneo(t)} className="px-3 py-1.5 bg-red-600 text-white rounded text-sm">🗑️</button>
+                <button onClick={() => openTorneoEquipos(t)} className="px-3 py-1.5 bg-blue-600 cursor-pointer text-white rounded text-sm">⚙️ Equipos</button>
+                <button onClick={() => openEditTorneo(t)} className="px-3 py-1.5 bg-gray-600 cursor-pointer text-white rounded text-sm">✏️</button>
+                <button onClick={() => handleDeleteTorneo(t)} className="px-3 py-1.5 bg-red-600 cursor-pointer text-white rounded text-sm">🗑️</button>
               </div>
             </div>
           ))}</div>
@@ -252,7 +252,7 @@ export default function AdminPage() {
               {c.logo_url ? <img src={c.logo_url} className="w-16 h-16 rounded-full object-cover" /> : <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center text-2xl">🏀</div>}
               <div className="flex-1"><h3 className="text-lg font-bold text-white">{c.nombre}</h3><p className="text-gray-400 text-sm">{c.nombre_corto}</p></div>
               <div className="flex gap-2">
-                <button onClick={() => openEditClub(c)} className="px-3 py-1.5 bg-gray-600 text-white rounded text-sm">Editar</button>
+                <button onClick={() => openEditClub(c)} className="px-3 py-1.5 bg-gray-600 cursor-pointer text-white rounded text-sm">Editar</button>
                 <button onClick={() => handleToggleClub(c)} className={`px-3 py-1.5 rounded text-sm text-white ${c.activo ? 'bg-yellow-600' : 'bg-green-600'}`}>{c.activo ? 'Desact.' : 'Activar'}</button>
               </div>
             </div>
@@ -262,7 +262,7 @@ export default function AdminPage() {
         {/* JUGADORES */}
         {tab === 'jugadores' && (<>
           <div className="mb-4 flex gap-4">
-            <button onClick={openCreateJugador} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">+ Jugador</button>
+            <button onClick={openCreateJugador} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium cursor-pointer">+ Jugador</button>
             <select value={filtroClub} onChange={e => setFiltroClub(e.target.value)} className="p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">Todos</option>{clubes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
           </div>
           <div className="bg-gray-800 rounded-xl overflow-hidden">
@@ -285,7 +285,7 @@ export default function AdminPage() {
         {/* PARTIDOS */}
         {tab === 'partidos' && (<>
           <div className="mb-4 flex gap-4">
-            <button onClick={openCreatePartido} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">+ Partido</button>
+            <button onClick={openCreatePartido} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium cursor-pointer">+ Partido</button>
             <select value={filtroTorneo} onChange={e => setFiltroTorneo(e.target.value)} className="p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">Todos</option>{torneos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
           </div>
           <div className="space-y-2">{partidosFiltrados.map(p => (
@@ -294,9 +294,9 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <span className={`px-2 py-0.5 rounded text-xs ${p.estado === 'FINALIZADO' ? 'bg-green-600' : p.estado === 'EN_CURSO' ? 'bg-red-600 animate-pulse' : 'bg-gray-600'} text-white`}>{p.estado}</span>
                 <span className="text-gray-400 text-sm">{new Date(p.fecha).toLocaleDateString()} {p.hora}</span>
-                <button onClick={() => navigate(`/${orgSlug}/partido/${p.id}/live`)} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">{p.estado === 'EN_CURSO' ? 'Continuar' : p.estado === 'PROGRAMADO' ? 'Planillar' : 'Ver'}</button>
-                {p.estado === 'FINALIZADO' && <button onClick={() => imprimirPlanilla(p.id)} className="px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm" title="Imprimir Planilla">🖨️</button>}
-                {p.estado === 'PROGRAMADO' && <button onClick={() => handleDeletePartido(p)} className="px-2 py-1.5 bg-red-600 text-white rounded text-sm">🗑️</button>}
+                <button onClick={() => navigate(`/${orgSlug}/partido/${p.id}/live`)} className="px-3 py-1.5 bg-blue-600 cursor-pointer text-white rounded text-sm">{p.estado === 'EN_CURSO' ? 'Continuar' : p.estado === 'PROGRAMADO' ? 'Planillar' : 'Ver'}</button>
+                {p.estado === 'FINALIZADO' && <button onClick={() => imprimirPlanilla(p.id)} className="px-2 py-1.5 bg-purple-600 cursor-pointer hover:bg-purple-700 text-white rounded text-sm" title="Imprimir Planilla">🖨️</button>}
+                {p.estado === 'PROGRAMADO' && <button onClick={() => handleDeletePartido(p)} className="px-2 py-1.5 bg-red-600 cursor-pointer text-white rounded text-sm">🗑️</button>}
               </div>
             </div>
           ))}</div>
@@ -342,7 +342,7 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Inicio</label><input type="date" value={torneoForm.fecha_inicio} onChange={e => setTorneoForm({...torneoForm, fecha_inicio: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Fin</label><input type="date" value={torneoForm.fecha_fin} onChange={e => setTorneoForm({...torneoForm, fecha_fin: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowTorneoModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleSaveTorneo} disabled={!torneoForm.nombre} className="flex-1 py-2 bg-blue-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowTorneoModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSaveTorneo} disabled={!torneoForm.nombre} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
         </div></div>
       )}
 
@@ -350,11 +350,11 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto"><div className="bg-gray-800 rounded-2xl p-6 max-w-4xl w-full my-8">
           <h2 className="text-xl font-bold text-white mb-4">{selectedTorneo.nombre} - Equipos</h2>
           <div className="grid grid-cols-2 gap-6">
-            <div><h3 className="text-lg font-medium text-white mb-3">En Torneo ({torneoEquipos.length})</h3><div className="space-y-2 max-h-60 overflow-y-auto">{torneoEquipos.map(te => (<div key={te.id} className="flex justify-between items-center bg-gray-700 rounded-lg p-2"><span className="text-white">{te.equipo?.nombre}</span><button onClick={() => handleRemoveEquipo(te.equipo_id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Quitar</button></div>))}</div>{torneoEquipos.length >= 2 && <button onClick={handleGenerarFixture} className="mt-4 w-full py-2 bg-green-600 text-white rounded-lg font-medium">🗓️ Generar Fixture</button>}</div>
-            <div><h3 className="text-lg font-medium text-white mb-3">Disponibles</h3><div className="space-y-2 max-h-60 overflow-y-auto">{clubes.filter(c => c.activo && !torneoEquipos.find(te => te.equipo_id === c.id)).map(c => (<div key={c.id} className="flex justify-between items-center bg-gray-700 rounded-lg p-2"><span className="text-white">{c.nombre}</span><button onClick={() => handleAddEquipo(c.id)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Agregar</button></div>))}</div></div>
+            <div><h3 className="text-lg font-medium text-white mb-3">En Torneo ({torneoEquipos.length})</h3><div className="space-y-2 max-h-60 overflow-y-auto">{torneoEquipos.map(te => (<div key={te.id} className="flex justify-between items-center bg-gray-700 rounded-lg p-2"><span className="text-white">{te.equipo?.nombre}</span><button onClick={() => handleRemoveEquipo(te.equipo_id)} className="px-2 py-1 bg-red-600 cursor-pointer text-white rounded text-xs">Quitar</button></div>))}</div>{torneoEquipos.length >= 2 && <button onClick={handleGenerarFixture} className="mt-4 w-full py-2 bg-green-600 cursor-pointer text-white rounded-lg font-medium">🗓️ Generar Fixture</button>}</div>
+            <div><h3 className="text-lg font-medium text-white mb-3">Disponibles</h3><div className="space-y-2 max-h-60 overflow-y-auto">{clubes.filter(c => c.activo && !torneoEquipos.find(te => te.equipo_id === c.id)).map(c => (<div key={c.id} className="flex justify-between items-center bg-gray-700 rounded-lg p-2"><span className="text-white">{c.nombre}</span><button onClick={() => handleAddEquipo(c.id)} className="px-2 py-1 bg-blue-600 cursor-pointer text-white rounded text-xs">Agregar</button></div>))}</div></div>
           </div>
           {tablaPosiciones.length > 0 && (<div className="mt-6"><h3 className="text-lg font-medium text-white mb-3">Tabla</h3><div className="bg-gray-700 rounded-lg overflow-hidden"><table className="w-full text-sm"><thead className="bg-gray-600"><tr><th className="px-3 py-2 text-left text-gray-300">#</th><th className="px-3 py-2 text-left text-gray-300">Equipo</th><th className="px-3 py-2 text-center text-gray-300">PJ</th><th className="px-3 py-2 text-center text-gray-300">G</th><th className="px-3 py-2 text-center text-gray-300">P</th><th className="px-3 py-2 text-center text-gray-300">DIF</th><th className="px-3 py-2 text-center text-gray-300 font-bold">PTS</th></tr></thead><tbody>{tablaPosiciones.map((t, i) => (<tr key={t.equipo_id} className="border-t border-gray-600"><td className="px-3 py-2 text-white font-bold">{i+1}</td><td className="px-3 py-2 text-white">{t.nombre_corto}</td><td className="px-3 py-2 text-center text-gray-300">{t.pj}</td><td className="px-3 py-2 text-center text-green-400">{t.pg}</td><td className="px-3 py-2 text-center text-red-400">{t.pp}</td><td className="px-3 py-2 text-center text-gray-300">{t.dif > 0 ? '+' : ''}{t.dif}</td><td className="px-3 py-2 text-center text-yellow-400 font-bold">{t.pts}</td></tr>))}</tbody></table></div></div>)}
-          <button onClick={() => setShowEquiposModal(false)} className="mt-6 w-full py-2 bg-gray-600 text-white rounded-lg">Cerrar</button>
+          <button onClick={() => setShowEquiposModal(false)} className="mt-6 w-full py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cerrar</button>
         </div></div>
       )}
 
@@ -367,7 +367,7 @@ export default function AdminPage() {
             <div><label className="block text-gray-300 text-sm mb-1">Nombre Corto *</label><input type="text" value={clubForm.nombre_corto} onChange={e => setClubForm({...clubForm, nombre_corto: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" maxLength={10} /></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowClubModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleSaveClub} disabled={!clubForm.nombre || !clubForm.nombre_corto} className="flex-1 py-2 bg-blue-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowClubModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSaveClub} disabled={!clubForm.nombre || !clubForm.nombre_corto} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
         </div></div>
       )}
 
@@ -385,7 +385,7 @@ export default function AdminPage() {
             </div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowJugadorModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleSaveJugador} disabled={!jugadorForm.nombre || !jugadorForm.apellido || !jugadorForm.equipo_id || !jugadorForm.numero_camiseta} className="flex-1 py-2 bg-blue-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowJugadorModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSaveJugador} disabled={!jugadorForm.nombre || !jugadorForm.apellido || !jugadorForm.equipo_id || !jugadorForm.numero_camiseta} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
         </div></div>
       )}
 
@@ -399,7 +399,7 @@ export default function AdminPage() {
             <div><label className="block text-gray-300 text-sm mb-1">Lugar</label><input type="text" value={partidoForm.lugar} onChange={e => setPartidoForm({...partidoForm, lugar: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowPartidoModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleSavePartido} disabled={!partidoForm.equipo_local_id || !partidoForm.equipo_visitante_id || !partidoForm.fecha} className="flex-1 py-2 bg-blue-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowPartidoModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSavePartido} disabled={!partidoForm.equipo_local_id || !partidoForm.equipo_visitante_id || !partidoForm.fecha} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
         </div></div>
       )}
 
@@ -407,10 +407,10 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 rounded-2xl p-6 max-w-lg w-full">
           <h2 className="text-xl font-bold text-white mb-2">Asignar Planillero</h2>
           <p className="text-gray-400 mb-4">{partidoAsignar.equipo_local?.nombre_corto} vs {partidoAsignar.equipo_visitante?.nombre_corto} - {new Date(partidoAsignar.fecha).toLocaleDateString()}</p>
-          {asignacionesPartido.length > 0 && (<div className="mb-4"><h3 className="text-sm font-medium text-gray-300 mb-2">Asignados:</h3><div className="space-y-2">{asignacionesPartido.map(a => (<div key={a.id} className="flex justify-between items-center bg-green-900/30 border border-green-700 rounded-lg p-2"><span className="text-white">{a.usuario?.nombre} {a.usuario?.apellido} {a.usuario?.club && <span className="text-gray-400 text-sm">({a.usuario.club.nombre_corto})</span>}</span><button onClick={() => handleQuitarAsig(a.usuario_id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Quitar</button></div>))}</div></div>)}
+          {asignacionesPartido.length > 0 && (<div className="mb-4"><h3 className="text-sm font-medium text-gray-300 mb-2">Asignados:</h3><div className="space-y-2">{asignacionesPartido.map(a => (<div key={a.id} className="flex justify-between items-center bg-green-900/30 border border-green-700 rounded-lg p-2"><span className="text-white">{a.usuario?.nombre} {a.usuario?.apellido} {a.usuario?.club && <span className="text-gray-400 text-sm">({a.usuario.club.nombre_corto})</span>}</span><button onClick={() => handleQuitarAsig(a.usuario_id)} className="px-2 py-1 bg-red-600 cursor-pointer text-white rounded text-xs">Quitar</button></div>))}</div></div>)}
           <h3 className="text-sm font-medium text-gray-300 mb-2">Disponibles:</h3>
           <div className="space-y-2 max-h-60 overflow-y-auto">{usuariosDisponibles.filter(u => !asignacionesPartido.find(a => a.usuario_id === u.id)).map(u => (<div key={u.id} className="flex justify-between items-center bg-gray-700 rounded-lg p-2"><span className="text-white">{u.nombre} {u.apellido} {u.club && <span className="text-gray-400 text-sm">({u.club.nombre_corto})</span>}</span><button onClick={() => handleAsignar(u.id)} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Asignar</button></div>))}</div>
-          <button onClick={() => setShowAsignarModal(false)} className="mt-6 w-full py-2 bg-gray-600 text-white rounded-lg">Cerrar</button>
+          <button onClick={() => setShowAsignarModal(false)} className="mt-6 w-full py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cerrar</button>
         </div></div>
       )}
 
@@ -424,7 +424,7 @@ export default function AdminPage() {
             <div><label className="block text-gray-300 text-sm mb-1">Club</label><select value={userForm.club_id} onChange={e => setUserForm({...userForm, club_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">Sin club</option>{clubes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowUserModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleCreateUser} disabled={!userForm.email || !userForm.password || !userForm.nombre} className="flex-1 py-2 bg-green-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowUserModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleCreateUser} disabled={!userForm.email || !userForm.password || !userForm.nombre} className="flex-1 py-2 bg-green-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
         </div></div>
       )}
     </div>
