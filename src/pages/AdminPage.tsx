@@ -5,13 +5,14 @@ import { supabase } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
 import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
 import { uploadClubLogo, uploadJugadorFoto } from '../services/storage.service';
+import { imprimirPlanilla } from '../services/pdf.service';
 import ImageUpload from '../components/common/ImageUpload';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
 
 interface Club { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; }
-interface Jugador { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; foto_url: string | null; activo: boolean; equipo?: { nombre_corto: string }; }
+interface Jugador { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
 interface Partido { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
 interface Usuario { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
 
@@ -49,7 +50,7 @@ export default function AdminPage() {
 
   const [showJugadorModal, setShowJugadorModal] = useState(false);
   const [editingJugador, setEditingJugador] = useState<Jugador | null>(null);
-  const [jugadorForm, setJugadorForm] = useState({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '' });
+  const [jugadorForm, setJugadorForm] = useState({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' });
 
   const [showPartidoModal, setShowPartidoModal] = useState(false);
   const [partidoForm, setPartidoForm] = useState({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' });
@@ -122,11 +123,11 @@ export default function AdminPage() {
   };
 
   // JUGADORES
-  const openCreateJugador = () => { setEditingJugador(null); setJugadorForm({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '' }); setShowJugadorModal(true); };
-  const openEditJugador = (j: Jugador) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', foto_url: j.foto_url || '' }); setShowJugadorModal(true); };
+  const openCreateJugador = () => { setEditingJugador(null); setJugadorForm({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' }); setShowJugadorModal(true); };
+  const openEditJugador = (j: Jugador) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', foto_url: j.foto_url || '', es_refuerzo: j.es_refuerzo || false, cuartos_limite: j.cuartos_limite ? String(j.cuartos_limite) : '' }); setShowJugadorModal(true); };
   const handleSaveJugador = async () => {
     if (!user?.organizacion_id) return; setError(null);
-    const data = { nombre: jugadorForm.nombre, apellido: jugadorForm.apellido, numero_camiseta: parseInt(jugadorForm.numero_camiseta), dni: jugadorForm.dni || null, fecha_nacimiento: jugadorForm.fecha_nacimiento || null, equipo_id: jugadorForm.equipo_id, certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null, foto_url: jugadorForm.foto_url || null };
+    const data = { nombre: jugadorForm.nombre, apellido: jugadorForm.apellido, numero_camiseta: parseInt(jugadorForm.numero_camiseta), dni: jugadorForm.dni || null, fecha_nacimiento: jugadorForm.fecha_nacimiento || null, equipo_id: jugadorForm.equipo_id, certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null, foto_url: jugadorForm.foto_url || null, es_refuerzo: jugadorForm.es_refuerzo, cuartos_limite: jugadorForm.cuartos_limite ? parseInt(jugadorForm.cuartos_limite) : null };
     if (editingJugador) await supabase.from('jugadores').update(data).eq('id', editingJugador.id);
     else await supabase.from('jugadores').insert({ ...data, organizacion_id: user.organizacion_id, activo: true });
     setShowJugadorModal(false); loadData();
@@ -294,6 +295,7 @@ export default function AdminPage() {
                 <span className={`px-2 py-0.5 rounded text-xs ${p.estado === 'FINALIZADO' ? 'bg-green-600' : p.estado === 'EN_CURSO' ? 'bg-red-600 animate-pulse' : 'bg-gray-600'} text-white`}>{p.estado}</span>
                 <span className="text-gray-400 text-sm">{new Date(p.fecha).toLocaleDateString()} {p.hora}</span>
                 <button onClick={() => navigate(`/${orgSlug}/partido/${p.id}/live`)} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">{p.estado === 'EN_CURSO' ? 'Continuar' : p.estado === 'PROGRAMADO' ? 'Planillar' : 'Ver'}</button>
+                {p.estado === 'FINALIZADO' && <button onClick={() => imprimirPlanilla(p.id)} className="px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm" title="Imprimir Planilla">🖨️</button>}
                 {p.estado === 'PROGRAMADO' && <button onClick={() => handleDeletePartido(p)} className="px-2 py-1.5 bg-red-600 text-white rounded text-sm">🗑️</button>}
               </div>
             </div>
@@ -377,6 +379,10 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Nombre *</label><input type="text" value={jugadorForm.nombre} onChange={e => setJugadorForm({...jugadorForm, nombre: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Apellido *</label><input type="text" value={jugadorForm.apellido} onChange={e => setJugadorForm({...jugadorForm, apellido: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Número *</label><input type="number" value={jugadorForm.numero_camiseta} onChange={e => setJugadorForm({...jugadorForm, numero_camiseta: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" min="0" max="99" /></div><div><label className="block text-gray-300 text-sm mb-1">Club *</label><select value={jugadorForm.equipo_id} onChange={e => setJugadorForm({...jugadorForm, equipo_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">-</option>{clubes.filter(c => c.activo).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">DNI</label><input type="text" value={jugadorForm.dni} onChange={e => setJugadorForm({...jugadorForm, dni: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Venc. Cert.</label><input type="date" value={jugadorForm.certificado_medico_vencimiento} onChange={e => setJugadorForm({...jugadorForm, certificado_medico_vencimiento: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
+            <div className="flex items-center gap-4 p-3 bg-orange-900/20 border border-orange-700 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={jugadorForm.es_refuerzo} onChange={e => setJugadorForm({...jugadorForm, es_refuerzo: e.target.checked})} className="w-4 h-4" /><span className="text-orange-400 font-medium">⚠️ Es Refuerzo</span></label>
+              {jugadorForm.es_refuerzo && <div className="flex items-center gap-2"><label className="text-gray-300 text-sm">Máx cuartos:</label><select value={jugadorForm.cuartos_limite} onChange={e => setJugadorForm({...jugadorForm, cuartos_limite: e.target.value})} className="p-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"><option value="">Sin límite</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>}
+            </div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
           <div className="flex gap-3 mt-6"><button onClick={() => setShowJugadorModal(false)} className="flex-1 py-2 bg-gray-600 text-white rounded-lg">Cancelar</button><button onClick={handleSaveJugador} disabled={!jugadorForm.nombre || !jugadorForm.apellido || !jugadorForm.equipo_id || !jugadorForm.numero_camiseta} className="flex-1 py-2 bg-blue-600 disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
