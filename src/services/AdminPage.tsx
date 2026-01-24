@@ -4,8 +4,8 @@ import { getCurrentUser, logout, createAuthUser } from '../services/auth.service
 import { supabase } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
 import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
-//import { uploadClubLogo, uploadJugadorFoto } from '../services/storage.service';
-//import ImageUpload from '../components/common/ImageUpload';
+import { uploadClubLogo, uploadJugadorFoto } from '../services/storage.service';
+import ImageUpload from '../components/common/ImageUpload';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
