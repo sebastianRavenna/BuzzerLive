@@ -110,8 +110,17 @@ export default function AdminPage() {
   const handleSaveClub = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const data = { nombre: clubForm.nombre, nombre_corto: clubForm.nombre_corto, logo_url: clubForm.logo_url || null };
-    if (editingClub) await supabase.from('equipos').update(data).eq('id', editingClub.id);
-    else await supabase.from('equipos').insert({ ...data, organizacion_id: user.organizacion_id, activo: true });
+    let result;
+    if (editingClub) {
+      result = await supabase.from('equipos').update(data).eq('id', editingClub.id);
+    } else {
+      result = await supabase.from('equipos').insert({ ...data, organizacion_id: user.organizacion_id, activo: true });
+    }
+    if (result.error) {
+      console.error('Error completo:', result.error);
+      setError(result.error.message + ' - ' + (result.error.details || '') + ' - ' + (result.error.hint || ''));
+      return;
+    }
     setShowClubModal(false); loadData();
   };
   const handleToggleClub = async (c: Club) => { await supabase.from('equipos').update({ activo: !c.activo }).eq('id', c.id); loadData(); };
@@ -128,8 +137,10 @@ export default function AdminPage() {
   const handleSaveJugador = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const data = { nombre: jugadorForm.nombre, apellido: jugadorForm.apellido, numero_camiseta: parseInt(jugadorForm.numero_camiseta), dni: jugadorForm.dni || null, fecha_nacimiento: jugadorForm.fecha_nacimiento || null, equipo_id: jugadorForm.equipo_id, certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null, foto_url: jugadorForm.foto_url || null, es_refuerzo: jugadorForm.es_refuerzo, cuartos_limite: jugadorForm.cuartos_limite ? parseInt(jugadorForm.cuartos_limite) : null };
-    if (editingJugador) await supabase.from('jugadores').update(data).eq('id', editingJugador.id);
-    else await supabase.from('jugadores').insert({ ...data, organizacion_id: user.organizacion_id, activo: true });
+    let result;
+    if (editingJugador) result = await supabase.from('jugadores').update(data).eq('id', editingJugador.id);
+    else result = await supabase.from('jugadores').insert({ ...data, organizacion_id: user.organizacion_id, activo: true });
+    if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowJugadorModal(false); loadData();
   };
   const handleToggleJugador = async (j: Jugador) => { await supabase.from('jugadores').update({ activo: !j.activo }).eq('id', j.id); loadData(); };
@@ -144,7 +155,8 @@ export default function AdminPage() {
   const openCreatePartido = () => { setPartidoForm({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' }); setShowPartidoModal(true); };
   const handleSavePartido = async () => {
     if (!user?.organizacion_id) return; setError(null);
-    await supabase.from('partidos').insert({ torneo_id: partidoForm.torneo_id || null, equipo_local_id: partidoForm.equipo_local_id, equipo_visitante_id: partidoForm.equipo_visitante_id, fecha: partidoForm.fecha, hora: partidoForm.hora, lugar: partidoForm.lugar || null, organizacion_id: user.organizacion_id, estado: 'PROGRAMADO', cuarto_actual: 0, puntos_local: 0, puntos_visitante: 0 });
+    const result = await supabase.from('partidos').insert({ torneo_id: partidoForm.torneo_id || null, equipo_local_id: partidoForm.equipo_local_id, equipo_visitante_id: partidoForm.equipo_visitante_id, fecha: partidoForm.fecha, hora: partidoForm.hora, lugar: partidoForm.lugar || null, organizacion_id: user.organizacion_id, estado: 'PROGRAMADO', cuarto_actual: 0, puntos_local: 0, puntos_visitante: 0 });
+    if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowPartidoModal(false); loadData();
   };
   const handleDeletePartido = async (p: Partido) => { if (p.estado !== 'PROGRAMADO' || !confirm('¿Eliminar?')) return; await supabase.from('partidos').delete().eq('id', p.id); loadData(); };
@@ -159,8 +171,9 @@ export default function AdminPage() {
   const handleCreateUser = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const { authId, error: authErr } = await createAuthUser(userForm.email, userForm.password);
-    if (authErr || !authId) { setError(authErr || 'Error'); return; }
-    await supabase.from('usuarios').insert({ auth_id: authId, email: userForm.email, nombre: userForm.nombre, apellido: userForm.apellido || null, rol: 'club', organizacion_id: user.organizacion_id, club_id: userForm.club_id || null, activo: true });
+    if (authErr || !authId) { setError(authErr || 'Error al crear auth'); return; }
+    const result = await supabase.from('usuarios').insert({ auth_id: authId, email: userForm.email, nombre: userForm.nombre, apellido: userForm.apellido || null, rol: 'club', organizacion_id: user.organizacion_id, club_id: userForm.club_id || null, activo: true });
+    if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowUserModal(false); loadData(); alert('Usuario creado');
   };
   const handleToggleUser = async (u: Usuario) => { await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id); loadData(); };
