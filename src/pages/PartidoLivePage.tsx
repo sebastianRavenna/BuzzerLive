@@ -53,8 +53,6 @@ export function PartidoLivePage() {
   
   // Estado de UI
   const [fase, setFase] = useState<Fase>('cargando');
-  const [isPortrait, setIsPortrait] = useState(false);
-  const [ignorePortraitWarning, setIgnorePortraitWarning] = useState(false);
   const [jugadorSeleccionadoLocal, setJugadorSeleccionadoLocal] = useState<JugadorEnPartido | null>(null);
   const [jugadorSeleccionadoVisitante, setJugadorSeleccionadoVisitante] = useState<JugadorEnPartido | null>(null);
   const [modoDescontar, setModoDescontar] = useState(false);
@@ -184,24 +182,6 @@ export function PartidoLivePage() {
 
     cargarPartido();
   }, [id]);
-
-  // Detectar orientación (solo en móvil, solo en fase en-juego)
-  useEffect(() => {
-    const checkOrientation = () => {
-      const isMobile = window.innerWidth < 1024;
-      const portrait = window.innerHeight > window.innerWidth;
-      setIsPortrait(isMobile && portrait && fase === 'en-juego' && !ignorePortraitWarning);
-    };
-    
-    checkOrientation();
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
-    
-    return () => {
-      window.removeEventListener('resize', checkOrientation);
-      window.removeEventListener('orientationchange', checkOrientation);
-    };
-  }, [fase, ignorePortraitWarning]);
 
   // Suscribirse a cambios en tiempo real
   useEffect(() => {
@@ -384,6 +364,10 @@ export function PartidoLivePage() {
     const valorReal = modoDescontar ? -valor : valor;
     const tipo: TipoAccion = valor === 1 ? 'PUNTO_1' : valor === 2 ? 'PUNTO_2' : 'PUNTO_3';
 
+    // Calcular nuevo resultado parcial
+    const nuevoPuntosLocal = esLocal ? partido.puntos_local + valorReal : partido.puntos_local;
+    const nuevoPuntosVisitante = !esLocal ? partido.puntos_visitante + valorReal : partido.puntos_visitante;
+
     // Actualizar UI optimista inmediatamente
     const actualizarJugadores = (jugadores: JugadorEnPartido[]) =>
       jugadores.map(j => 
@@ -407,10 +391,10 @@ export function PartidoLivePage() {
       return;
     }
 
-    // Si está online, enviar al servidor
+    // Si está online, enviar al servidor con resultado parcial
     setProcesando(true);
     try {
-      await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
+      await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar, 0, null, nuevoPuntosLocal, nuevoPuntosVisitante);
     } catch (err) {
       // Si falla, agregar a la cola offline
       addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
@@ -1184,29 +1168,6 @@ export function PartidoLivePage() {
   // Pantalla principal de carga (en juego)
   const tiemposLocal = getTiemposDisponibles(true);
   const tiemposVisitante = getTiemposDisponibles(false);
-
-  // Overlay para orientación portrait en móvil
-  if (isPortrait) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
-        <div className="text-center">
-          <div className="text-6xl mb-6 animate-pulse">📱🔄</div>
-          <h2 className="text-2xl font-bold text-white mb-4">Girá tu dispositivo</h2>
-          <p className="text-gray-400 mb-6">La planilla funciona mejor en modo horizontal (landscape)</p>
-          <div className="w-24 h-16 border-4 border-white rounded-lg mx-auto mb-4 relative">
-            <div className="absolute inset-2 bg-blue-500 rounded animate-pulse"></div>
-          </div>
-          <p className="text-gray-500 text-sm">O continuá en vertical con vista reducida</p>
-          <button
-            onClick={() => setIgnorePortraitWarning(true)}
-            className="mt-4 px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm"
-          >
-            Continuar igual →
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col relative">

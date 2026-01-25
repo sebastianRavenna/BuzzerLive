@@ -23,7 +23,6 @@ export default function AdminPage() {
   const [user, setUser] = useState<AuthUsuario | null>(getCurrentUser());
   const [tab, setTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [torneos, setTorneos] = useState<Torneo[]>([]);
   const [clubes, setClubes] = useState<Club[]>([]);
@@ -95,11 +94,9 @@ export default function AdminPage() {
       navigate(`/${user.organizacion?.slug}`);
       return;
     }
-    if (!dataLoaded) {
-      loadData();
-      setDataLoaded(true);
-    }
-  }, [user, orgSlug, dataLoaded]);
+    // Siempre recargar datos cuando user cambie
+    loadData();
+  }, [user, orgSlug]);
 
   const loadData = async () => {
     if (!user?.organizacion_id) return;
@@ -129,7 +126,7 @@ export default function AdminPage() {
     if (result.error) { setError(result.error); return; }
     setShowTorneoModal(false); loadData();
   };
-  const handleDeleteTorneo = async (t: Torneo) => { if (!confirm(`¿Eliminar "${t.nombre}"?`)) return; const { error } = await deleteTorneo(t.id); if (error) alert(error); else loadData(); };
+  const handleDeleteTorneo = async (t: Torneo) => { if (!confirm(`¿Eliminar "${t.nombre}"?`)) return; const result = await deleteTorneo(t.id); if (!result.success) alert(result.error); else loadData(); };
   const openTorneoEquipos = async (t: Torneo) => { setSelectedTorneo(t); setTorneoEquipos(await getTorneoEquipos(t.id)); setTablaPosiciones(await getTablaPosiciones(t.id)); setShowEquiposModal(true); };
   const handleAddEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await addEquipoToTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };
   const handleRemoveEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await removeEquipoFromTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };

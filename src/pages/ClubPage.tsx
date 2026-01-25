@@ -65,7 +65,6 @@ export default function ClubPage() {
   const [user, setUser] = useState<AuthUsuario | null>(getCurrentUser());
   const [tab, setTab] = useState<Tab>('info');
   const [loading, setLoading] = useState(true);
-  const [dataLoaded, setDataLoaded] = useState(false);
   
   const [club, setClub] = useState<Club | null>(null);
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
@@ -115,11 +114,8 @@ export default function ClubPage() {
       navigate('/login');
       return;
     }
-    if (!dataLoaded) {
-      loadData();
-      setDataLoaded(true);
-    }
-  }, [user, navigate, dataLoaded]);
+    loadData();
+  }, [user, navigate]);
 
   const loadData = async () => {
     if (!user?.club_id || !user?.organizacion_id) return;

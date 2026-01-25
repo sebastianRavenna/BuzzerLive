@@ -143,7 +143,9 @@ export async function registrarAccion(
   cuarto: number,
   esDescuento: boolean = false,
   tirosLibres: number = 0,
-  numeroFalta: number | null = null
+  numeroFalta: number | null = null,
+  puntosLocal: number | null = null,
+  puntosVisitante: number | null = null
 ) {
   // Si es descuento, usamos una lógica diferente (actualización directa)
   if (esDescuento) {
@@ -164,13 +166,10 @@ export async function registrarAccion(
 
   if (error) throw error;
   
-  // Si hay tiros libres o número de falta, actualizar la acción recién creada
-  // El RPC devuelve el ID de la acción, pero por si acaso buscamos por timestamp
-  if (tirosLibres > 0 || numeroFalta !== null) {
-    // Pequeña espera para asegurar que la acción se haya guardado
+  // Actualizar campos adicionales si es necesario
+  if (tirosLibres > 0 || numeroFalta !== null || puntosLocal !== null) {
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Buscar la acción que acabamos de crear por timestamp y jugador
     const { data: accionCreada } = await supabase
       .from('acciones')
       .select('id')
@@ -181,13 +180,15 @@ export async function registrarAccion(
       .single();
     
     if (accionCreada) {
-      await supabase
-        .from('acciones')
-        .update({ 
-          tiros_libres: tirosLibres,
-          numero_falta: numeroFalta
-        })
-        .eq('id', accionCreada.id);
+      const updateData: any = {};
+      if (tirosLibres > 0) updateData.tiros_libres = tirosLibres;
+      if (numeroFalta !== null) updateData.numero_falta = numeroFalta;
+      if (puntosLocal !== null) updateData.puntos_local = puntosLocal;
+      if (puntosVisitante !== null) updateData.puntos_visitante = puntosVisitante;
+      
+      if (Object.keys(updateData).length > 0) {
+        await supabase.from('acciones').update(updateData).eq('id', accionCreada.id);
+      }
     }
   }
   
