@@ -12,6 +12,12 @@ interface AccionLog {
   timestamp_local: string;
   tiros_libres: number;
   numero_falta: number | null;
+  jugador_entra_numero: number | null;
+  jugador_entra_apellido: string | null;
+  jugador_sale_numero: number | null;
+  jugador_sale_apellido: string | null;
+  puntos_local: number | null;
+  puntos_visitante: number | null;
 }
 
 interface LogAccionesProps {
@@ -24,7 +30,6 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [acciones, setAcciones] = useState<AccionLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Cargar acciones iniciales (TODAS)
   useEffect(() => {
     async function cargarAcciones() {
       const { data, error } = await supabase
@@ -37,13 +42,16 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           timestamp_local,
           tiros_libres,
           numero_falta,
+          puntos_local,
+          puntos_visitante,
           equipo:equipos(nombre_corto),
-          jugador:jugadores(numero_camiseta, apellido)
+          jugador:jugadores(numero_camiseta, apellido),
+          jugador_entra:jugadores!jugador_entra_id(numero_camiseta, apellido),
+          jugador_sale:jugadores!jugador_sale_id(numero_camiseta, apellido)
         `)
         .eq('partido_id', partidoId)
         .eq('anulada', false)
         .order('timestamp_local', { ascending: false });
-        // Sin .limit() - trae todas las acciones
 
       if (error) {
         console.error('Error cargando acciones:', error);
@@ -63,6 +71,12 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           timestamp_local: a.timestamp_local,
           tiros_libres: a.tiros_libres || 0,
           numero_falta: a.numero_falta || null,
+          jugador_entra_numero: (a.jugador_entra as any)?.numero_camiseta || null,
+          jugador_entra_apellido: (a.jugador_entra as any)?.apellido || null,
+          jugador_sale_numero: (a.jugador_sale as any)?.numero_camiseta || null,
+          jugador_sale_apellido: (a.jugador_sale as any)?.apellido || null,
+          puntos_local: a.puntos_local,
+          puntos_visitante: a.puntos_visitante,
         })));
       }
       setLoading(false);
@@ -71,7 +85,6 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     cargarAcciones();
   }, [partidoId]);
 
-  // Suscribirse a nuevas acciones en tiempo real
   useEffect(() => {
     const channel = supabase
       .channel(`acciones-log-${partidoId}`)
@@ -94,8 +107,12 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               timestamp_local,
               tiros_libres,
               numero_falta,
+              puntos_local,
+              puntos_visitante,
               equipo:equipos(nombre_corto),
-              jugador:jugadores(numero_camiseta, apellido)
+              jugador:jugadores(numero_camiseta, apellido),
+              jugador_entra:jugadores!jugador_entra_id(numero_camiseta, apellido),
+              jugador_sale:jugadores!jugador_sale_id(numero_camiseta, apellido)
             `)
             .eq('id', payload.new.id)
             .single();
@@ -112,9 +129,14 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
               timestamp_local: data.timestamp_local,
               tiros_libres: data.tiros_libres || 0,
               numero_falta: data.numero_falta || null,
+              jugador_entra_numero: (data.jugador_entra as any)?.numero_camiseta || null,
+              jugador_entra_apellido: (data.jugador_entra as any)?.apellido || null,
+              jugador_sale_numero: (data.jugador_sale as any)?.numero_camiseta || null,
+              jugador_sale_apellido: (data.jugador_sale as any)?.apellido || null,
+              puntos_local: data.puntos_local,
+              puntos_visitante: data.puntos_visitante,
             };
             
-            // Agregar al principio sin límite
             setAcciones(prev => [nuevaAccion, ...prev]);
           }
         }
@@ -126,10 +148,10 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     };
   }, [partidoId]);
 
-  const formatTipo = (accion: AccionLog): string => {
+  const formatTipo = (accion: AccionLog): { texto: string; tachado: boolean } => {
     const { tipo, valor, numero_falta, tiros_libres } = accion;
+    const esDescuento = valor < 0;
     
-    // Construir texto para faltas con número y tiros
     const buildFaltaText = (nombre: string): string => {
       let texto = nombre;
       if (numero_falta) texto = `${numero_falta}ª ${nombre}`;
@@ -137,45 +159,30 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       return texto;
     };
     
-    // Si valor es negativo, es un descuento
-    if (valor < 0) {
-      switch (tipo) {
-        case 'PUNTO_1': return '−1';
-        case 'PUNTO_2': return '−2';
-        case 'PUNTO_3': return '−3';
-        case 'FALTA_PERSONAL': return '−F. Personal';
-        case 'FALTA_TECNICA': return '−F. Técnica';
-        case 'FALTA_ANTIDEPORTIVA': return '−F. Antideportiva';
-        case 'FALTA_DESCALIFICANTE': return '−Expulsión';
-        case 'FALTA_TECNICA_ENTRENADOR': return '−T. Entrenador';
-        case 'FALTA_TECNICA_BANCO': return '−T. Banco';
-        case 'FALTA_DESCALIFICANTE_ENTRENADOR': return '−Expulsión DT';
-        default: return `−${tipo}`;
-      }
-    }
+    let texto = '';
     
     switch (tipo) {
-      case 'PUNTO_1': return '+1';
-      case 'PUNTO_2': return '+2';
-      case 'PUNTO_3': return '+3';
-      case 'FALTA_PERSONAL': return buildFaltaText('F. Personal');
-      case 'FALTA_TECNICA': return buildFaltaText('F. Técnica');
-      case 'FALTA_ANTIDEPORTIVA': return buildFaltaText('F. Antideportiva');
-      case 'FALTA_DESCALIFICANTE': return 'Expulsión';
-      case 'FALTA_TECNICA_ENTRENADOR': return 'T. Entrenador';
-      case 'FALTA_TECNICA_BANCO': return 'T. Banco';
-      case 'FALTA_DESCALIFICANTE_ENTRENADOR': return 'Expulsión DT';
-      case 'TIEMPO_MUERTO': return 'TIEMPO';
-      case 'FIN_CUARTO': return `FIN Q${valor || ''}`;
-      case 'INICIO_CUARTO': return `INICIO Q${valor || ''}`;
-      default: return tipo;
+      case 'PUNTO_1': texto = '+1'; break;
+      case 'PUNTO_2': texto = '+2'; break;
+      case 'PUNTO_3': texto = '+3'; break;
+      case 'FALTA_PERSONAL': texto = buildFaltaText('F. Personal'); break;
+      case 'FALTA_TECNICA': texto = buildFaltaText('F. Técnica'); break;
+      case 'FALTA_ANTIDEPORTIVA': texto = buildFaltaText('F. Antideportiva'); break;
+      case 'FALTA_DESCALIFICANTE': texto = 'Expulsado'; break;
+      case 'FALTA_TECNICA_ENTRENADOR': texto = 'T. Entrenador'; break;
+      case 'FALTA_TECNICA_BANCO': texto = 'T. Banco'; break;
+      case 'FALTA_DESCALIFICANTE_ENTRENADOR': texto = 'DT Expulsado'; break;
+      case 'TIEMPO_MUERTO': texto = '⏱️ TIEMPO'; break;
+      case 'FIN_CUARTO': texto = `FIN Q${valor || ''}`; break;
+      case 'INICIO_CUARTO': texto = `INICIO Q${valor || ''}`; break;
+      case 'SUSTITUCION': texto = '🔄 Cambio'; break;
+      default: texto = tipo;
     }
+    
+    return { texto, tachado: esDescuento };
   };
 
-  const getColorClase = (tipo: string, valor: number): string => {
-    // Descuentos en naranja
-    if (valor < 0) return 'text-orange-400';
-    
+  const getColorClase = (tipo: string): string => {
     if (tipo.startsWith('PUNTO')) return 'text-green-400';
     if (tipo === 'FALTA_PERSONAL') return 'text-red-400';
     if (tipo === 'FALTA_TECNICA') return 'text-yellow-400';
@@ -184,14 +191,22 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     if (tipo === 'FALTA_TECNICA_ENTRENADOR') return 'text-yellow-300';
     if (tipo === 'FALTA_TECNICA_BANCO') return 'text-orange-400';
     if (tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR') return 'text-red-600 font-bold';
-    if (tipo === 'TIEMPO_MUERTO') return 'text-purple-400';
+    if (tipo === 'TIEMPO_MUERTO') return 'text-purple-400 font-bold';
     if (tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO') return 'text-blue-400 font-bold';
+    if (tipo === 'SUSTITUCION') return 'text-cyan-400';
     return 'text-gray-400';
   };
 
-  // Determinar si la acción es de sistema (no tiene jugador)
   const esAccionSistema = (tipo: string): boolean => {
-    return tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO';
+    return tipo === 'FIN_CUARTO' || tipo === 'INICIO_CUARTO' || tipo === 'TIEMPO_MUERTO';
+  };
+
+  const esSustitucion = (tipo: string): boolean => {
+    return tipo === 'SUSTITUCION';
+  };
+
+  const esFaltaEntrenador = (tipo: string): boolean => {
+    return tipo === 'FALTA_TECNICA_ENTRENADOR' || tipo === 'FALTA_TECNICA_BANCO' || tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR';
   };
 
   if (loading) {
@@ -218,35 +233,71 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         </h3>
       )}
       <div className={`space-y-1.5 ${compact ? 'max-h-32' : 'max-h-[400px]'} overflow-y-auto`}>
-        {acciones.map((accion) => (
-          <div 
-            key={accion.id} 
-            className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'} text-gray-300 ${
-              esAccionSistema(accion.tipo) ? 'bg-blue-900/30 rounded px-2 py-1 justify-center' : ''
-            }`}
-          >
-            {esAccionSistema(accion.tipo) ? (
-              // Acciones de sistema (cambio de cuarto)
-              <span className={`font-bold ${getColorClase(accion.tipo, accion.valor)}`}>
-                {formatTipo(accion)}
-              </span>
-            ) : (
-              // Acciones normales
-              <>
-                <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
-                <span className="text-gray-400 truncate">{accion.equipo_nombre}</span>
-                {accion.jugador_numero && (
-                  <span className="text-white font-medium truncate">
-                    #{accion.jugador_numero} {accion.jugador_apellido}
+        {acciones.map((accion) => {
+          const { texto, tachado } = formatTipo(accion);
+          
+          return (
+            <div 
+              key={accion.id} 
+              className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'} text-gray-300 ${
+                esAccionSistema(accion.tipo) ? 'bg-blue-900/30 rounded px-2 py-1 justify-center flex-wrap' : ''
+              }`}
+            >
+              {esAccionSistema(accion.tipo) ? (
+                <>
+                  <span className={`font-bold ${getColorClase(accion.tipo)}`}>
+                    {texto}
                   </span>
-                )}
-                <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo, accion.valor)}`}>
-                  {formatTipo(accion)}
-                </span>
-              </>
-            )}
-          </div>
-        ))}
+                  {accion.tipo === 'TIEMPO_MUERTO' && (
+                    <span className="text-gray-400">({accion.equipo_nombre})</span>
+                  )}
+                  {accion.tipo === 'FIN_CUARTO' && accion.puntos_local !== null && accion.puntos_visitante !== null && (
+                    <span className="text-white font-medium ml-2">
+                      ({accion.puntos_local} - {accion.puntos_visitante})
+                    </span>
+                  )}
+                </>
+              ) : esSustitucion(accion.tipo) ? (
+                <>
+                  <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
+                  <span className="text-gray-400">{accion.equipo_nombre}</span>
+                  <span className={getColorClase(accion.tipo)}>
+                    🔄 #{accion.jugador_entra_numero} {accion.jugador_entra_apellido}
+                    <span className="text-gray-500 mx-1">↔</span>
+                    #{accion.jugador_sale_numero} {accion.jugador_sale_apellido}
+                  </span>
+                </>
+              ) : esFaltaEntrenador(accion.tipo) ? (
+                <>
+                  <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
+                  <span className="text-gray-400">{accion.equipo_nombre}</span>
+                  <span className="text-white font-medium">👔 DT</span>
+                  <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo)} ${tachado ? 'line-through opacity-60' : ''}`}>
+                    {texto}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-gray-500 w-6 flex-shrink-0">Q{accion.cuarto}</span>
+                  <span className="text-gray-400 truncate">{accion.equipo_nombre}</span>
+                  {accion.jugador_numero && (
+                    <span className="text-white font-medium truncate">
+                      #{accion.jugador_numero} {accion.jugador_apellido}
+                    </span>
+                  )}
+                  <span className={`font-bold flex-shrink-0 ${getColorClase(accion.tipo)} ${tachado ? 'line-through opacity-60' : ''}`}>
+                    {texto}
+                  </span>
+                  {accion.tipo.startsWith('PUNTO') && !tachado && accion.puntos_local !== null && accion.puntos_visitante !== null && (
+                    <span className="text-gray-500 text-xs">
+                      ({accion.puntos_local}-{accion.puntos_visitante})
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

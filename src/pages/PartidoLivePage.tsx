@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -9,7 +10,8 @@ import {
   finalizarPartido,
   suspenderPartido,
   suscribirseAPartido,
-  actualizarTiemposMuertos
+  actualizarTiemposMuertos,
+  registrarSustitucion
 } from '../services/partido.service';
 import {
   isOnline,
@@ -51,6 +53,8 @@ export function PartidoLivePage() {
   
   // Estado de UI
   const [fase, setFase] = useState<Fase>('cargando');
+  const [isPortrait, setIsPortrait] = useState(false);
+  const [ignorePortraitWarning, setIgnorePortraitWarning] = useState(false);
   const [jugadorSeleccionadoLocal, setJugadorSeleccionadoLocal] = useState<JugadorEnPartido | null>(null);
   const [jugadorSeleccionadoVisitante, setJugadorSeleccionadoVisitante] = useState<JugadorEnPartido | null>(null);
   const [modoDescontar, setModoDescontar] = useState(false);
@@ -180,6 +184,24 @@ export function PartidoLivePage() {
 
     cargarPartido();
   }, [id]);
+
+  // Detectar orientación (solo en móvil, solo en fase en-juego)
+  useEffect(() => {
+    const checkOrientation = () => {
+      const isMobile = window.innerWidth < 1024;
+      const portrait = window.innerHeight > window.innerWidth;
+      setIsPortrait(isMobile && portrait && fase === 'en-juego' && !ignorePortraitWarning);
+    };
+    
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    
+    return () => {
+      window.removeEventListener('resize', checkOrientation);
+      window.removeEventListener('orientationchange', checkOrientation);
+    };
+  }, [fase, ignorePortraitWarning]);
 
   // Suscribirse a cambios en tiempo real
   useEffect(() => {
@@ -312,13 +334,16 @@ export function PartidoLivePage() {
   };
 
   // Sustitución
-  const handleSustitucion = (entrando: JugadorEnPartido, saliendo: JugadorEnPartido, esLocal: boolean) => {
+  const handleSustitucionMultiple = async (sustituciones: Array<{ entrando: JugadorEnPartido; saliendo: JugadorEnPartido }>, esLocal: boolean) => {
     const setTitulares = esLocal ? setTitularesLocal : setTitularesVisitante;
+    const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     
     setTitulares(prev => {
       const nuevoSet = new Set(prev);
-      nuevoSet.delete(saliendo.id);
-      nuevoSet.add(entrando.id);
+      sustituciones.forEach(s => {
+        nuevoSet.delete(s.saliendo.id);
+        nuevoSet.add(s.entrando.id);
+      });
       return nuevoSet;
     });
     
@@ -327,6 +352,17 @@ export function PartidoLivePage() {
       setJugadorSeleccionadoLocal(null);
     } else {
       setJugadorSeleccionadoVisitante(null);
+    }
+
+    // Registrar sustituciones en el log
+    if (id && partido && equipoId) {
+      try {
+        await registrarSustitucion(id, equipoId, partido.cuarto_actual, 
+          sustituciones.map(s => ({ jugadorEntraId: s.entrando.id, jugadorSaleId: s.saliendo.id }))
+        );
+      } catch (err) {
+        console.error('Error registrando sustitución:', err);
+      }
     }
   };
 
@@ -577,6 +613,7 @@ export function PartidoLivePage() {
     
     const tiempos = getTiemposDisponibles(esLocal);
     const tiemposUsados = esLocal ? partido.tiempos_muertos_local : partido.tiempos_muertos_visitante;
+    const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
     
     // Validar disponibilidad
     if (!modoDescontar && tiemposUsados >= tiempos.maximo) {
@@ -588,12 +625,14 @@ export function PartidoLivePage() {
       return;
     }
 
+    if (!equipoId) return;
+
     setProcesando(true);
     try {
       const delta = modoDescontar ? -1 : 1;
       const nuevoValor = tiemposUsados + delta;
       
-      await actualizarTiemposMuertos(id, esLocal, nuevoValor);
+      await actualizarTiemposMuertos(id, esLocal, nuevoValor, equipoId, partido.cuarto_actual, modoDescontar);
       
       setPartido(prev => {
         if (!prev) return null;
@@ -720,9 +759,9 @@ export function PartidoLivePage() {
     
     setProcesando(true);
     try {
-      // Registrar FIN_CUARTO (solo si no es descuento)
+      // Registrar FIN_CUARTO con resultado parcial (solo si no es descuento)
       if (!modoDescontar) {
-        await registrarAccionSistema(id, equipoLocal.id, 'FIN_CUARTO', partido.cuarto_actual);
+        await registrarAccionSistema(id, equipoLocal.id, 'FIN_CUARTO', partido.cuarto_actual, partido.puntos_local, partido.puntos_visitante);
       }
       
       // Actualizar cuarto en BD
@@ -733,10 +772,11 @@ export function PartidoLivePage() {
         await registrarAccionSistema(id, equipoLocal.id, 'INICIO_CUARTO', nuevoCuarto);
       }
       
-      // Si hay que resetear tiempos, actualizar en BD también
+      // Si hay que resetear tiempos, actualizar en BD también (sin registrar en log)
       if (resetearTiempos) {
-        await actualizarTiemposMuertos(id, true, 0);
-        await actualizarTiemposMuertos(id, false, 0);
+        const { error: e1 } = await supabase.from('partidos').update({ tiempos_muertos_local: 0 }).eq('id', id);
+        const { error: e2 } = await supabase.from('partidos').update({ tiempos_muertos_visitante: 0 }).eq('id', id);
+        if (e1 || e2) console.error('Error reseteando tiempos:', e1 || e2);
       }
       
       // Actualizar estado local
@@ -1145,6 +1185,29 @@ export function PartidoLivePage() {
   const tiemposLocal = getTiemposDisponibles(true);
   const tiemposVisitante = getTiemposDisponibles(false);
 
+  // Overlay para orientación portrait en móvil
+  if (isPortrait) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="text-6xl mb-6 animate-pulse">📱🔄</div>
+          <h2 className="text-2xl font-bold text-white mb-4">Girá tu dispositivo</h2>
+          <p className="text-gray-400 mb-6">La planilla funciona mejor en modo horizontal (landscape)</p>
+          <div className="w-24 h-16 border-4 border-white rounded-lg mx-auto mb-4 relative">
+            <div className="absolute inset-2 bg-blue-500 rounded animate-pulse"></div>
+          </div>
+          <p className="text-gray-500 text-sm">O continuá en vertical con vista reducida</p>
+          <button
+            onClick={() => setIgnorePortraitWarning(true)}
+            className="mt-4 px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm"
+          >
+            Continuar igual →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col relative">
       {/* Botón salir - Esquina superior izquierda */}
@@ -1248,7 +1311,7 @@ export function PartidoLivePage() {
             onPunto={(valor) => handlePunto(valor, true)}
             onFalta={() => handleFalta(true)}
             onTiempoMuerto={() => handleTiempoMuerto(true)}
-            onSustitucion={(entrando, saliendo) => handleSustitucion(entrando, saliendo, true)}
+            onSustitucionMultiple={(subs) => handleSustitucionMultiple(subs, true)}
             tiemposUsados={partido.tiempos_muertos_local}
             tiemposMaximo={tiemposLocal.maximo}
             modoDescontar={modoDescontar}
@@ -1268,7 +1331,7 @@ export function PartidoLivePage() {
             onPunto={(valor) => handlePunto(valor, false)}
             onFalta={() => handleFalta(false)}
             onTiempoMuerto={() => handleTiempoMuerto(false)}
-            onSustitucion={(entrando, saliendo) => handleSustitucion(entrando, saliendo, false)}
+            onSustitucionMultiple={(subs) => handleSustitucionMultiple(subs, false)}
             tiemposUsados={partido.tiempos_muertos_visitante}
             tiemposMaximo={tiemposVisitante.maximo}
             modoDescontar={modoDescontar}
@@ -1729,7 +1792,7 @@ interface EquipoPanelProps {
   onPunto: (valor: 1 | 2 | 3) => void;
   onFalta: () => void;
   onTiempoMuerto: () => void;
-  onSustitucion: (entrando: JugadorEnPartido, saliendo: JugadorEnPartido) => void;
+  onSustitucionMultiple: (sustituciones: Array<{ entrando: JugadorEnPartido; saliendo: JugadorEnPartido }>) => void;
   tiemposUsados: number;
   tiemposMaximo: number;
   modoDescontar: boolean;
@@ -1748,7 +1811,7 @@ function EquipoPanel({
   onPunto,
   onFalta,
   onTiempoMuerto,
-  onSustitucion,
+  onSustitucionMultiple,
   tiemposUsados,
   tiemposMaximo,
   modoDescontar,
@@ -1758,25 +1821,64 @@ function EquipoPanel({
   ultimos2MinActivo
 }: EquipoPanelProps) {
   const [modoSustitucion, setModoSustitucion] = useState(false);
-  const [jugadorSaliendo, setJugadorSaliendo] = useState<JugadorEnPartido | null>(null);
+  const [titularesSaliendo, setTitularesSaliendo] = useState<Set<string>>(new Set());
+  const [suplentesEntrando, setSuplentesEntrando] = useState<Set<string>>(new Set());
 
   const handleClickTitular = (jugador: JugadorEnPartido) => {
     if (modoSustitucion) {
-      setJugadorSaliendo(jugador);
+      // Toggle selección de titular que sale
+      setTitularesSaliendo(prev => {
+        const nuevoSet = new Set(prev);
+        if (nuevoSet.has(jugador.id)) {
+          nuevoSet.delete(jugador.id);
+        } else {
+          nuevoSet.add(jugador.id);
+        }
+        return nuevoSet;
+      });
     } else {
       onSeleccionarJugador(jugadorSeleccionado?.id === jugador.id ? null : jugador);
     }
   };
 
   const handleClickSuplente = (jugador: JugadorEnPartido) => {
-    if (modoSustitucion && jugadorSaliendo) {
-      onSustitucion(jugador, jugadorSaliendo);
-      setModoSustitucion(false);
-      setJugadorSaliendo(null);
+    if (modoSustitucion) {
+      // Toggle selección de suplente que entra
+      setSuplentesEntrando(prev => {
+        const nuevoSet = new Set(prev);
+        if (nuevoSet.has(jugador.id)) {
+          nuevoSet.delete(jugador.id);
+        } else {
+          nuevoSet.add(jugador.id);
+        }
+        return nuevoSet;
+      });
     } else if (modoDescontar) {
-      // En modo descontar, permitir seleccionar suplentes (incluso bloqueados)
       onSeleccionarJugador(jugadorSeleccionado?.id === jugador.id ? null : jugador);
     }
+  };
+
+  const handleConfirmarSustitucion = () => {
+    if (titularesSaliendo.size === 0 || titularesSaliendo.size !== suplentesEntrando.size) return;
+    
+    const salenArray = titulares.filter(j => titularesSaliendo.has(j.id));
+    const entranArray = suplentes.filter(j => suplentesEntrando.has(j.id));
+    
+    const sustituciones = salenArray.map((saliendo, i) => ({
+      entrando: entranArray[i],
+      saliendo
+    }));
+    
+    onSustitucionMultiple(sustituciones);
+    setModoSustitucion(false);
+    setTitularesSaliendo(new Set());
+    setSuplentesEntrando(new Set());
+  };
+
+  const handleCancelarSustitucion = () => {
+    setModoSustitucion(false);
+    setTitularesSaliendo(new Set());
+    setSuplentesEntrando(new Set());
   };
 
   const tiemposDisponibles = tiemposMaximo - tiemposUsados;
@@ -1792,13 +1894,12 @@ function EquipoPanel({
       <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-2 sm:mb-3">
         {titulares.map(jugador => {
           const eliminado = jugador.faltas >= 5 || jugador.descalificado;
-          // En modo descontar, permitir seleccionar jugadores eliminados
           const deshabilitado = eliminado && !modoDescontar && !modoSustitucion;
+          const estaSaliendoSeleccionado = titularesSaliendo.has(jugador.id);
           
-          // Determinar qué mostrar: 5F, Expulsado, o GD
           const getEstadoJugador = () => {
             if (jugador.expulsado_directo) return 'Expulsado';
-            if (jugador.descalificado) return 'GD'; // Descalificado por acumulación
+            if (jugador.descalificado) return 'GD';
             if (jugador.faltas >= 5) return '5F';
             return null;
           };
@@ -1816,11 +1917,11 @@ function EquipoPanel({
                       ? 'bg-orange-900 border-orange-500 ring-2 ring-orange-400'
                       : 'bg-red-900/50 border-red-600 hover:border-orange-500 cursor-pointer'
                     : modoSustitucion
-                      ? jugadorSaliendo?.id === jugador.id
+                      ? estaSaliendoSeleccionado
                         ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
                         : 'bg-red-900/50 border-red-600 hover:border-red-500'
                       : 'bg-red-900/30 border-red-800 opacity-50'
-                  : modoSustitucion && jugadorSaliendo?.id === jugador.id
+                  : modoSustitucion && estaSaliendoSeleccionado
                     ? 'bg-yellow-900 border-yellow-500 ring-2 ring-yellow-400'
                     : modoSustitucion
                       ? 'bg-gray-700 border-yellow-600 hover:border-yellow-500'
@@ -1831,6 +1932,9 @@ function EquipoPanel({
                           : 'bg-gray-700 border-gray-600 hover:border-gray-500'
               }`}
             >
+              {modoSustitucion && estaSaliendoSeleccionado && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs">✓</div>
+              )}
               <div className="text-lg sm:text-xl font-bold text-white">{jugador.numero_camiseta}</div>
               <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
               {estadoJugador ? (
@@ -1924,8 +2028,11 @@ function EquipoPanel({
       {/* Botón sustitución */}
       <button
         onClick={() => {
-          setModoSustitucion(!modoSustitucion);
-          setJugadorSaliendo(null);
+          if (modoSustitucion) {
+            handleCancelarSustitucion();
+          } else {
+            setModoSustitucion(true);
+          }
         }}
         className={`w-full py-1.5 sm:py-2 mb-2 sm:mb-3 text-sm sm:text-base font-bold rounded-lg transition-colors ${
           modoSustitucion
@@ -1936,13 +2043,23 @@ function EquipoPanel({
         {modoSustitucion ? '✕ Cancelar' : '⇄ Sustitución'}
       </button>
       
-      {/* Instrucción sustitución */}
+      {/* Instrucción y botón confirmar sustitución */}
       {modoSustitucion && (
-        <div className="text-[10px] sm:text-xs text-yellow-400 text-center mb-2">
-          {jugadorSaliendo 
-            ? `Seleccioná suplente por #${jugadorSaliendo.numero_camiseta}`
-            : 'Seleccioná el titular que sale'
-          }
+        <div className="mb-2 sm:mb-3 p-2 bg-yellow-900/30 rounded-lg border border-yellow-700">
+          <div className="text-[10px] sm:text-xs text-yellow-400 text-center mb-2">
+            Salen: {titularesSaliendo.size} | Entran: {suplentesEntrando.size}
+            {titularesSaliendo.size !== suplentesEntrando.size && titularesSaliendo.size > 0 && suplentesEntrando.size > 0 && (
+              <span className="text-red-400 ml-2">⚠️ Deben ser iguales</span>
+            )}
+          </div>
+          {titularesSaliendo.size > 0 && titularesSaliendo.size === suplentesEntrando.size && (
+            <button
+              onClick={handleConfirmarSustitucion}
+              className="w-full py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-sm"
+            >
+              ✓ Confirmar {titularesSaliendo.size} cambio{titularesSaliendo.size > 1 ? 's' : ''}
+            </button>
+          )}
         </div>
       )}
       
@@ -1951,13 +2068,12 @@ function EquipoPanel({
       <div className="grid grid-cols-5 gap-1 sm:gap-2">
         {suplentes.map(jugador => {
           const eliminado = jugador.faltas >= 5 || jugador.descalificado;
-          const puedeEntrar = modoSustitucion && jugadorSaliendo && !eliminado;
-          // En modo descontar, verificar si tiene algo que descontar
+          const estaEntrandoSeleccionado = suplentesEntrando.has(jugador.id);
+          const puedeEntrar = modoSustitucion && !eliminado;
           const tieneQueDescontar = jugador.faltas > 0 || jugador.faltas_tecnicas > 0 || jugador.faltas_antideportivas > 0 || jugador.puntos > 0;
           const puedeDescontar = modoDescontar && tieneQueDescontar;
           const estaSeleccionado = jugadorSeleccionado?.id === jugador.id;
           
-          // Determinar qué mostrar: 5F, Expulsado, o GD
           const getEstadoJugador = () => {
             if (jugador.expulsado_directo) return 'Expulsado';
             if (jugador.descalificado) return 'GD';
@@ -1966,7 +2082,6 @@ function EquipoPanel({
           };
           const estadoJugador = getEstadoJugador();
           
-          // Determinar si está habilitado
           const habilitado = puedeEntrar || puedeDescontar;
           
           return (
@@ -1974,18 +2089,23 @@ function EquipoPanel({
               key={jugador.id}
               onClick={() => handleClickSuplente(jugador)}
               disabled={!habilitado}
-              className={`p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
-                modoDescontar && puedeDescontar
-                  ? estaSeleccionado
-                    ? 'bg-orange-900 border-orange-500 ring-2 ring-orange-400'
-                    : 'bg-gray-700 border-orange-600 hover:border-orange-500 cursor-pointer'
-                  : eliminado
-                    ? 'bg-red-900/30 border-red-800 opacity-50 cursor-not-allowed'
-                    : puedeEntrar
-                      ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
-                      : 'bg-gray-800 border-gray-700 opacity-60'
+              className={`relative p-1 sm:p-2 rounded-lg border-2 transition-all text-center ${
+                modoSustitucion && estaEntrandoSeleccionado
+                  ? 'bg-green-900 border-green-500 ring-2 ring-green-400'
+                  : modoDescontar && puedeDescontar
+                    ? estaSeleccionado
+                      ? 'bg-orange-900 border-orange-500 ring-2 ring-orange-400'
+                      : 'bg-gray-700 border-orange-600 hover:border-orange-500 cursor-pointer'
+                    : eliminado
+                      ? 'bg-red-900/30 border-red-800 opacity-50 cursor-not-allowed'
+                      : puedeEntrar
+                        ? 'bg-gray-700 border-green-600 hover:border-green-500 hover:bg-green-900/30'
+                        : 'bg-gray-800 border-gray-700 opacity-60'
               }`}
             >
+              {modoSustitucion && estaEntrandoSeleccionado && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-xs text-white">✓</div>
+              )}
               <div className="text-base sm:text-lg font-bold text-white">{jugador.numero_camiseta}</div>
               <div className="text-[10px] sm:text-xs text-gray-400 truncate">{jugador.apellido}</div>
               {estadoJugador ? (

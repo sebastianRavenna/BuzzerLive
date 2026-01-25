@@ -323,11 +323,14 @@ export async function cambiarCuarto(partidoId: string, nuevoCuarto: number) {
   if (error) throw error;
 }
 
-// Actualizar tiempos muertos
+// Actualizar tiempos muertos y registrar en log
 export async function actualizarTiemposMuertos(
   partidoId: string, 
   esLocal: boolean, 
-  nuevoValor: number
+  nuevoValor: number,
+  equipoId: string,
+  cuartoActual: number,
+  esDescuento: boolean = false
 ) {
   const campo = esLocal ? 'tiempos_muertos_local' : 'tiempos_muertos_visitante';
   
@@ -340,6 +343,27 @@ export async function actualizarTiemposMuertos(
     .eq('id', partidoId);
 
   if (error) throw error;
+
+  // Registrar en el log de acciones (solo si no es descuento)
+  if (!esDescuento) {
+    const { error: errorAccion } = await supabase
+      .from('acciones')
+      .insert({
+        partido_id: partidoId,
+        equipo_id: equipoId,
+        jugador_id: null,
+        tipo: 'TIEMPO_MUERTO',
+        cuarto: cuartoActual,
+        valor: 1,
+        timestamp_local: new Date().toISOString(),
+        cliente_id: getClienteId(),
+        anulada: false,
+      });
+    
+    if (errorAccion) {
+      console.error('Error registrando tiempo muerto en log:', errorAccion);
+    }
+  }
 }
 
 // Finalizar partido
@@ -424,12 +448,14 @@ export function suscribirseAPartido(
   };
 }
 
-// Registrar acción de sistema (cambio de cuarto) - usa equipo local como referencia
+// Registrar acción de sistema (cambio de cuarto) con resultado parcial
 export async function registrarAccionSistema(
   partidoId: string,
   equipoId: string,
   tipo: 'FIN_CUARTO' | 'INICIO_CUARTO',
-  cuarto: number
+  cuarto: number,
+  puntosLocal?: number,
+  puntosVisitante?: number
 ) {
   const { error } = await supabase
     .from('acciones')
@@ -443,10 +469,43 @@ export async function registrarAccionSistema(
       timestamp_local: new Date().toISOString(),
       cliente_id: getClienteId(),
       anulada: false,
+      puntos_local: puntosLocal ?? null,
+      puntos_visitante: puntosVisitante ?? null,
     });
   
   if (error) {
     console.error('Error registrando acción de sistema:', error);
+    throw error;
+  }
+}
+
+// Registrar sustitución (múltiple) en el log
+export async function registrarSustitucion(
+  partidoId: string,
+  equipoId: string,
+  cuartoActual: number,
+  sustituciones: Array<{ jugadorEntraId: string; jugadorSaleId: string }>
+) {
+  const acciones = sustituciones.map(s => ({
+    partido_id: partidoId,
+    equipo_id: equipoId,
+    jugador_id: null,
+    tipo: 'SUSTITUCION',
+    cuarto: cuartoActual,
+    valor: 1,
+    timestamp_local: new Date().toISOString(),
+    cliente_id: getClienteId(),
+    anulada: false,
+    jugador_entra_id: s.jugadorEntraId,
+    jugador_sale_id: s.jugadorSaleId,
+  }));
+
+  const { error } = await supabase
+    .from('acciones')
+    .insert(acciones);
+  
+  if (error) {
+    console.error('Error registrando sustitución:', error);
     throw error;
   }
 }
