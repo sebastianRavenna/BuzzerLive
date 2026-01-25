@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCurrentUser, logout } from '../services/auth.service';
+import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
@@ -62,9 +62,10 @@ interface Partido {
 export default function ClubPage() {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<AuthUsuario | null>(getCurrentUser());
   const [tab, setTab] = useState<Tab>('info');
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   const [club, setClub] = useState<Club | null>(null);
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
@@ -92,8 +93,21 @@ export default function ClubPage() {
   
   const [error, setError] = useState<string | null>(null);
 
+  // Suscribirse a cambios de auth
   useEffect(() => {
-    if (!user || user.rol !== 'club') {
+    const unsubscribe = onAuthChange((newUser) => {
+      setUser(newUser);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Cargar datos cuando usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'club') {
       navigate('/login');
       return;
     }
@@ -101,8 +115,11 @@ export default function ClubPage() {
       navigate('/login');
       return;
     }
-    loadData();
-  }, [user, navigate]);
+    if (!dataLoaded) {
+      loadData();
+      setDataLoaded(true);
+    }
+  }, [user, navigate, dataLoaded]);
 
   const loadData = async () => {
     if (!user?.club_id || !user?.organizacion_id) return;
@@ -281,7 +298,8 @@ export default function ClubPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-300">{user?.nombre}</span>
-            <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">Salir</button>
+            <button onClick={() => navigate('/')} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm cursor-pointer">🏠 Inicio</button>
+            <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm cursor-pointer">Salir</button>
           </div>
         </div>
       </header>

@@ -98,6 +98,17 @@ export async function createTorneo(
   organizacionId: string,
   input: TorneoInput
 ): Promise<{ torneo: Torneo | null; error: string | null }> {
+  // Verificar límite de torneos
+  const { data: org } = await supabase
+    .from('organizaciones')
+    .select('limite_torneos, torneos_count')
+    .eq('id', organizacionId)
+    .single();
+
+  if (org && org.torneos_count >= org.limite_torneos) {
+    return { torneo: null, error: `Límite de torneos alcanzado (${org.limite_torneos}). Contacte al administrador para ampliar su plan.` };
+  }
+
   const { data, error } = await supabase
     .from('torneos')
     .insert({
@@ -118,6 +129,12 @@ export async function createTorneo(
   if (error) {
     return { torneo: null, error: error.message };
   }
+
+  // Actualizar contador de torneos
+  await supabase
+    .from('organizaciones')
+    .update({ torneos_count: (org?.torneos_count || 0) + 1 })
+    .eq('id', organizacionId);
 
   return { torneo: data, error: null };
 }
@@ -141,6 +158,13 @@ export async function updateTorneo(
 
 // Eliminar torneo
 export async function deleteTorneo(id: string): Promise<{ success: boolean; error: string | null }> {
+  // Obtener el torneo para saber la org
+  const { data: torneo } = await supabase
+    .from('torneos')
+    .select('organizacion_id')
+    .eq('id', id)
+    .single();
+
   // Verificar que no tenga partidos
   const { data: partidos } = await supabase
     .from('partidos')
@@ -162,6 +186,20 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  // Decrementar contador de torneos
+  if (torneo?.organizacion_id) {
+    const { data: org } = await supabase
+      .from('organizaciones')
+      .select('torneos_count')
+      .eq('id', torneo.organizacion_id)
+      .single();
+    
+    await supabase
+      .from('organizaciones')
+      .update({ torneos_count: Math.max(0, (org?.torneos_count || 1) - 1) })
+      .eq('id', torneo.organizacion_id);
   }
 
   return { success: true, error: null };

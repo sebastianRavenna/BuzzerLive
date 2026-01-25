@@ -1,27 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCurrentUser, logout, createAuthUser } from '../services/auth.service';
+import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
 import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
-import { uploadClubLogo, uploadJugadorFoto } from '../services/storage.service';
+import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../services/storage.service';
+import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, exportarJugadoresEquipo, type JugadorImport, type ImportResult } from '../services/excel.service';
 import { imprimirPlanilla } from '../services/pdf.service';
 import ImageUpload from '../components/common/ImageUpload';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
 
-interface Club { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; }
-interface Jugador { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
+interface Club { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; direccion: string | null; telefono: string | null; email: string | null; }
+interface Jugador { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
 interface Partido { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
 interface Usuario { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<AuthUsuario | null>(getCurrentUser());
   const [tab, setTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [torneos, setTorneos] = useState<Torneo[]>([]);
   const [clubes, setClubes] = useState<Club[]>([]);
@@ -46,11 +48,11 @@ export default function AdminPage() {
 
   const [showClubModal, setShowClubModal] = useState(false);
   const [editingClub, setEditingClub] = useState<Club | null>(null);
-  const [clubForm, setClubForm] = useState({ nombre: '', nombre_corto: '', logo_url: '' });
+  const [clubForm, setClubForm] = useState({ nombre: '', nombre_corto: '', logo_url: '', direccion: '', telefono: '', email: '' });
 
   const [showJugadorModal, setShowJugadorModal] = useState(false);
   const [editingJugador, setEditingJugador] = useState<Jugador | null>(null);
-  const [jugadorForm, setJugadorForm] = useState({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' });
+  const [jugadorForm, setJugadorForm] = useState({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', certificado_medico_url: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' });
 
   const [showPartidoModal, setShowPartidoModal] = useState(false);
   const [partidoForm, setPartidoForm] = useState({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' });
@@ -63,12 +65,41 @@ export default function AdminPage() {
   const [userForm, setUserForm] = useState({ email: '', password: '', nombre: '', apellido: '', club_id: '' });
 
   const [error, setError] = useState<string | null>(null);
+  
+  // Import Excel
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importEquipoId, setImportEquipoId] = useState('');
+  const [importPreview, setImportPreview] = useState<JugadorImport[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+  // Suscribirse a cambios de autenticación
   useEffect(() => {
-    if (!user || (user.rol !== 'admin' && user.rol !== 'superadmin')) { navigate('/login'); return; }
-    if (user.rol === 'admin' && user.organizacion?.slug !== orgSlug) { navigate(`/${user.organizacion?.slug}`); return; }
-    loadData();
-  }, [user, orgSlug]);
+    const unsubscribe = onAuthChange((newUser) => {
+      setUser(newUser);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Cargar datos cuando el usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'admin' && user.rol !== 'superadmin') {
+      navigate('/login');
+      return;
+    }
+    if (user.rol === 'admin' && user.organizacion?.slug !== orgSlug) {
+      navigate(`/${user.organizacion?.slug}`);
+      return;
+    }
+    if (!dataLoaded) {
+      loadData();
+      setDataLoaded(true);
+    }
+  }, [user, orgSlug, dataLoaded]);
 
   const loadData = async () => {
     if (!user?.organizacion_id) return;
@@ -105,11 +136,11 @@ export default function AdminPage() {
   const handleGenerarFixture = async () => { if (!selectedTorneo || !user?.organizacion_id || !confirm('¿Generar fixture?')) return; const { partidos: n, error } = await generarFixture(selectedTorneo.id, user.organizacion_id, true); if (error) alert(error); else { alert(`${n} partidos creados`); loadData(); setShowEquiposModal(false); } };
 
   // CLUBES
-  const openCreateClub = () => { setEditingClub(null); setClubForm({ nombre: '', nombre_corto: '', logo_url: '' }); setShowClubModal(true); };
-  const openEditClub = (c: Club) => { setEditingClub(c); setClubForm({ nombre: c.nombre, nombre_corto: c.nombre_corto || '', logo_url: c.logo_url || '' }); setShowClubModal(true); };
+  const openCreateClub = () => { setEditingClub(null); setClubForm({ nombre: '', nombre_corto: '', logo_url: '', direccion: '', telefono: '', email: '' }); setShowClubModal(true); };
+  const openEditClub = (c: Club) => { setEditingClub(c); setClubForm({ nombre: c.nombre, nombre_corto: c.nombre_corto || '', logo_url: c.logo_url || '', direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '' }); setShowClubModal(true); };
   const handleSaveClub = async () => {
     if (!user?.organizacion_id) return; setError(null);
-    const data = { nombre: clubForm.nombre, nombre_corto: clubForm.nombre_corto, logo_url: clubForm.logo_url || null };
+    const data = { nombre: clubForm.nombre, nombre_corto: clubForm.nombre_corto, logo_url: clubForm.logo_url || null, direccion: clubForm.direccion || null, telefono: clubForm.telefono || null, email: clubForm.email || null };
     let result;
     if (editingClub) {
       result = await supabase.from('equipos').update(data).eq('id', editingClub.id);
@@ -132,8 +163,8 @@ export default function AdminPage() {
   };
 
   // JUGADORES
-  const openCreateJugador = () => { setEditingJugador(null); setJugadorForm({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' }); setShowJugadorModal(true); };
-  const openEditJugador = (j: Jugador) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', foto_url: j.foto_url || '', es_refuerzo: j.es_refuerzo || false, cuartos_limite: j.cuartos_limite ? String(j.cuartos_limite) : '' }); setShowJugadorModal(true); };
+  const openCreateJugador = () => { setEditingJugador(null); setJugadorForm({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', certificado_medico_url: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' }); setShowJugadorModal(true); };
+  const openEditJugador = (j: Jugador) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', certificado_medico_url: j.certificado_medico_url || '', foto_url: j.foto_url || '', es_refuerzo: j.es_refuerzo || false, cuartos_limite: j.cuartos_limite ? String(j.cuartos_limite) : '' }); setShowJugadorModal(true); };
   const handleSaveJugador = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const data = { nombre: jugadorForm.nombre, apellido: jugadorForm.apellido, numero_camiseta: parseInt(jugadorForm.numero_camiseta), dni: jugadorForm.dni || null, fecha_nacimiento: jugadorForm.fecha_nacimiento || null, equipo_id: jugadorForm.equipo_id, certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null, foto_url: jugadorForm.foto_url || null, es_refuerzo: jugadorForm.es_refuerzo, cuartos_limite: jugadorForm.cuartos_limite ? parseInt(jugadorForm.cuartos_limite) : null };
@@ -150,6 +181,36 @@ export default function AdminPage() {
     if (result.url) setJugadorForm({ ...jugadorForm, foto_url: result.url });
     return result;
   };
+  const handleUploadCertificado = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingJugador) { alert('Guarda el jugador primero'); return; }
+    const result = await uploadJugadorCertificado(file, editingJugador.id);
+    if (result.error) { alert(result.error); return; }
+    if (result.url) { setJugadorForm({ ...jugadorForm, certificado_medico_url: result.url }); alert('Certificado subido correctamente'); }
+  };
+
+  // IMPORT EXCEL
+  const openImportModal = () => { setImportEquipoId(''); setImportPreview([]); setImportResult(null); setShowImportModal(true); };
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const jugadores = await parsearExcelJugadores(file);
+      setImportPreview(jugadores);
+    } catch (err) {
+      alert('Error al leer el archivo');
+      setImportPreview([]);
+    }
+  };
+  const handleImport = async () => {
+    if (!user?.organizacion_id || !importEquipoId || importPreview.length === 0) return;
+    setImporting(true);
+    const result = await importarJugadores(user.organizacion_id, importEquipoId, importPreview);
+    setImportResult(result);
+    setImporting(false);
+    if (result.success > 0) loadData();
+  };
+  const handleExportEquipo = (equipoId: string, nombre: string) => { exportarJugadoresEquipo(equipoId, nombre); };
 
   // PARTIDOS
   const openCreatePartido = () => { setPartidoForm({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' }); setShowPartidoModal(true); };
@@ -189,7 +250,7 @@ export default function AdminPage() {
       <header className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div><h1 className="text-2xl font-bold text-white">{org?.nombre || 'Admin'}</h1><p className="text-sm text-gray-400">Panel de Administración</p></div>
-          <div className="flex items-center gap-4"><span className="text-gray-300">{user?.email}</span><button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">Salir</button></div>
+          <div className="flex items-center gap-4"><span className="text-gray-300">{user?.email}</span><button onClick={() => navigate('/')} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm cursor-pointer">🏠 Inicio</button><button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm cursor-pointer">Salir</button></div>
         </div>
       </header>
 
@@ -274,9 +335,12 @@ export default function AdminPage() {
 
         {/* JUGADORES */}
         {tab === 'jugadores' && (<>
-          <div className="mb-4 flex gap-4">
+          <div className="mb-4 flex flex-wrap gap-4 items-center">
             <button onClick={openCreateJugador} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium cursor-pointer">+ Jugador</button>
+            <button onClick={openImportModal} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium cursor-pointer">📥 Importar Excel</button>
+            <button onClick={() => descargarPlantillaJugadores()} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium cursor-pointer">📄 Plantilla</button>
             <select value={filtroClub} onChange={e => setFiltroClub(e.target.value)} className="p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">Todos</option>{clubes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
+            {filtroClub && <button onClick={() => { const club = clubes.find(c => c.id === filtroClub); if (club) handleExportEquipo(club.id, club.nombre); }} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm cursor-pointer">📤 Exportar {clubes.find(c => c.id === filtroClub)?.nombre_corto}</button>}
           </div>
           <div className="bg-gray-800 rounded-xl overflow-hidden">
             <table className="w-full"><thead className="bg-gray-700"><tr><th className="px-4 py-3 text-left text-gray-300 text-sm">Foto</th><th className="px-4 py-3 text-left text-gray-300 text-sm">#</th><th className="px-4 py-3 text-left text-gray-300 text-sm">Nombre</th><th className="px-4 py-3 text-left text-gray-300 text-sm">Club</th><th className="px-4 py-3 text-left text-gray-300 text-sm">DNI</th><th className="px-4 py-3 text-left text-gray-300 text-sm">Cert.</th><th className="px-4 py-3 text-right text-gray-300 text-sm">Acc.</th></tr></thead>
@@ -284,11 +348,11 @@ export default function AdminPage() {
                 <tr key={j.id} className={`border-t border-gray-700 hover:bg-gray-700/50 ${!j.activo && 'opacity-50'}`}>
                   <td className="px-4 py-2">{j.foto_url ? <img src={j.foto_url} className="w-10 h-10 rounded-full object-cover" /> : <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center">👤</div>}</td>
                   <td className="px-4 py-2 text-white font-bold">{j.numero_camiseta}</td>
-                  <td className="px-4 py-2 text-white">{j.apellido}, {j.nombre}</td>
+                  <td className="px-4 py-2 text-white">{j.apellido}, {j.nombre} {j.es_refuerzo && <span className="text-orange-400 text-xs">(R)</span>}</td>
                   <td className="px-4 py-2 text-gray-400">{j.equipo?.nombre_corto}</td>
                   <td className="px-4 py-2 text-gray-400">{j.dni || '-'}</td>
-                  <td className="px-4 py-2">{j.certificado_medico_vencimiento ? <span className={new Date(j.certificado_medico_vencimiento) < new Date() ? 'text-red-400' : 'text-green-400'}>{new Date(j.certificado_medico_vencimiento).toLocaleDateString()}</span> : '-'}</td>
-                  <td className="px-4 py-2 text-right"><button onClick={() => openEditJugador(j)} className="px-2 py-1 bg-gray-600 text-white rounded text-xs mr-1">Editar</button><button onClick={() => handleToggleJugador(j)} className={`px-2 py-1 rounded text-xs text-white ${j.activo ? 'bg-yellow-600' : 'bg-green-600'}`}>{j.activo ? 'Baja' : 'Alta'}</button></td>
+                  <td className="px-4 py-2">{j.certificado_medico_url ? <a href={j.certificado_medico_url} target="_blank" rel="noopener noreferrer" className={`hover:underline ${j.certificado_medico_vencimiento && new Date(j.certificado_medico_vencimiento) < new Date() ? 'text-red-400' : 'text-green-400'}`}>📎 {j.certificado_medico_vencimiento ? new Date(j.certificado_medico_vencimiento).toLocaleDateString() : 'Ver'}</a> : (j.certificado_medico_vencimiento ? <span className={new Date(j.certificado_medico_vencimiento) < new Date() ? 'text-red-400' : 'text-yellow-400'}>{new Date(j.certificado_medico_vencimiento).toLocaleDateString()}</span> : <span className="text-gray-500">-</span>)}</td>
+                  <td className="px-4 py-2 text-right"><button onClick={() => openEditJugador(j)} className="px-2 py-1 bg-gray-600 text-white rounded text-xs mr-1 cursor-pointer">Editar</button><button onClick={() => handleToggleJugador(j)} className={`px-2 py-1 rounded text-xs text-white cursor-pointer ${j.activo ? 'bg-yellow-600' : 'bg-green-600'}`}>{j.activo ? 'Baja' : 'Alta'}</button></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -378,6 +442,11 @@ export default function AdminPage() {
             {editingClub && <div className="flex justify-center"><ImageUpload currentUrl={clubForm.logo_url} onUpload={handleUploadLogo} placeholder="🏀" label="Logo" size="lg" /></div>}
             <div><label className="block text-gray-300 text-sm mb-1">Nombre *</label><input type="text" value={clubForm.nombre} onChange={e => setClubForm({...clubForm, nombre: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
             <div><label className="block text-gray-300 text-sm mb-1">Nombre Corto *</label><input type="text" value={clubForm.nombre_corto} onChange={e => setClubForm({...clubForm, nombre_corto: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" maxLength={10} /></div>
+            <div><label className="block text-gray-300 text-sm mb-1">Dirección</label><input type="text" value={clubForm.direccion} onChange={e => setClubForm({...clubForm, direccion: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" placeholder="Av. Ejemplo 123" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-gray-300 text-sm mb-1">Teléfono</label><input type="text" value={clubForm.telefono} onChange={e => setClubForm({...clubForm, telefono: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
+              <div><label className="block text-gray-300 text-sm mb-1">Email</label><input type="email" value={clubForm.email} onChange={e => setClubForm({...clubForm, email: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
+            </div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
           <div className="flex gap-3 mt-6"><button onClick={() => setShowClubModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSaveClub} disabled={!clubForm.nombre || !clubForm.nombre_corto} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Guardar</button></div>
@@ -391,7 +460,15 @@ export default function AdminPage() {
             {editingJugador && <div className="flex justify-center"><ImageUpload currentUrl={jugadorForm.foto_url} onUpload={handleUploadFoto} placeholder="👤" label="Foto" size="lg" /></div>}
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Nombre *</label><input type="text" value={jugadorForm.nombre} onChange={e => setJugadorForm({...jugadorForm, nombre: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Apellido *</label><input type="text" value={jugadorForm.apellido} onChange={e => setJugadorForm({...jugadorForm, apellido: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Número *</label><input type="number" value={jugadorForm.numero_camiseta} onChange={e => setJugadorForm({...jugadorForm, numero_camiseta: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" min="0" max="99" /></div><div><label className="block text-gray-300 text-sm mb-1">Club *</label><select value={jugadorForm.equipo_id} onChange={e => setJugadorForm({...jugadorForm, equipo_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">-</option>{clubes.filter(c => c.activo).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div></div>
-            <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">DNI</label><input type="text" value={jugadorForm.dni} onChange={e => setJugadorForm({...jugadorForm, dni: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Venc. Cert.</label><input type="date" value={jugadorForm.certificado_medico_vencimiento} onChange={e => setJugadorForm({...jugadorForm, certificado_medico_vencimiento: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
+            <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">DNI</label><input type="text" value={jugadorForm.dni} onChange={e => setJugadorForm({...jugadorForm, dni: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Fecha Nac.</label><input type="date" value={jugadorForm.fecha_nacimiento} onChange={e => setJugadorForm({...jugadorForm, fecha_nacimiento: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
+            <div className="p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+              <label className="block text-gray-300 text-sm mb-2">📋 Certificado Médico</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-gray-400 text-xs mb-1">Vencimiento</label><input type="date" value={jugadorForm.certificado_medico_vencimiento} onChange={e => setJugadorForm({...jugadorForm, certificado_medico_vencimiento: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" /></div>
+                <div><label className="block text-gray-400 text-xs mb-1">Archivo (PDF/Imagen)</label>{editingJugador ? <input type="file" accept="image/*,.pdf" onChange={handleUploadCertificado} className="w-full p-1.5 bg-gray-700 border border-gray-600 rounded text-white text-xs" /> : <span className="text-gray-500 text-xs">Guarda primero</span>}</div>
+              </div>
+              {jugadorForm.certificado_medico_url && <a href={jugadorForm.certificado_medico_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-blue-400 hover:text-blue-300 text-sm">📎 Ver certificado actual</a>}
+            </div>
             <div className="flex items-center gap-4 p-3 bg-orange-900/20 border border-orange-700 rounded-lg">
               <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={jugadorForm.es_refuerzo} onChange={e => setJugadorForm({...jugadorForm, es_refuerzo: e.target.checked})} className="w-4 h-4" /><span className="text-orange-400 font-medium">⚠️ Es Refuerzo</span></label>
               {jugadorForm.es_refuerzo && <div className="flex items-center gap-2"><label className="text-gray-300 text-sm">Máx cuartos:</label><select value={jugadorForm.cuartos_limite} onChange={e => setJugadorForm({...jugadorForm, cuartos_limite: e.target.value})} className="p-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"><option value="">Sin límite</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>}
@@ -439,6 +516,86 @@ export default function AdminPage() {
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
           <div className="flex gap-3 mt-6"><button onClick={() => setShowUserModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleCreateUser} disabled={!userForm.email || !userForm.password || !userForm.nombre} className="flex-1 py-2 bg-green-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
         </div></div>
+      )}
+
+      {/* Modal Import Excel */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-auto">
+            <h2 className="text-xl font-bold text-white mb-4">📥 Importar Jugadores desde Excel</h2>
+            
+            {!importResult ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-300 text-sm mb-1">Club destino *</label>
+                  <select value={importEquipoId} onChange={e => setImportEquipoId(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white">
+                    <option value="">Seleccionar club...</option>
+                    {clubes.filter(c => c.activo).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-gray-300 text-sm mb-1">Archivo Excel (.xlsx)</label>
+                  <input type="file" accept=".xlsx,.xls" onChange={handleFileSelect} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" />
+                </div>
+                
+                {importPreview.length > 0 && (
+                  <div>
+                    <p className="text-gray-300 text-sm mb-2">Vista previa ({importPreview.length} jugadores):</p>
+                    <div className="bg-gray-900 rounded-lg overflow-auto max-h-60">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-700">
+                          <tr>
+                            <th className="px-2 py-1 text-left text-gray-300">#</th>
+                            <th className="px-2 py-1 text-left text-gray-300">Nombre</th>
+                            <th className="px-2 py-1 text-left text-gray-300">Apellido</th>
+                            <th className="px-2 py-1 text-left text-gray-300">DNI</th>
+                            <th className="px-2 py-1 text-left text-gray-300">Ref.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.map((j, i) => (
+                            <tr key={i} className="border-t border-gray-700">
+                              <td className="px-2 py-1 text-white">{j.numero_camiseta}</td>
+                              <td className="px-2 py-1 text-white">{j.nombre}</td>
+                              <td className="px-2 py-1 text-white">{j.apellido}</td>
+                              <td className="px-2 py-1 text-gray-400">{j.dni || '-'}</td>
+                              <td className="px-2 py-1">{j.es_refuerzo ? <span className="text-orange-400">SI</span> : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => setShowImportModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button>
+                  <button onClick={handleImport} disabled={!importEquipoId || importPreview.length === 0 || importing} className="flex-1 py-2 bg-green-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">
+                    {importing ? 'Importando...' : `Importar ${importPreview.length} jugadores`}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 bg-green-900/30 border border-green-700 rounded-lg">
+                  <p className="text-green-400 font-medium">✅ {importResult.success} jugadores importados correctamente</p>
+                </div>
+                
+                {importResult.errors.length > 0 && (
+                  <div className="p-4 bg-red-900/30 border border-red-700 rounded-lg">
+                    <p className="text-red-400 font-medium mb-2">❌ {importResult.errors.length} errores:</p>
+                    <ul className="text-red-300 text-sm space-y-1">
+                      {importResult.errors.map((e, i) => <li key={i}>Fila {e.row}: {e.error}</li>)}
+                    </ul>
+                  </div>
+                )}
+                
+                <button onClick={() => setShowImportModal(false)} className="w-full py-2 bg-blue-600 cursor-pointer text-white rounded-lg font-medium">Cerrar</button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

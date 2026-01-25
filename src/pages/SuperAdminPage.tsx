@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, logout, createAuthUser } from '../services/auth.service';
+import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { 
   getOrganizaciones, 
   createOrganizacion, 
@@ -26,10 +26,11 @@ interface OrgStats {
 
 export default function SuperAdminPage() {
   const navigate = useNavigate();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<AuthUsuario | null>(getCurrentUser());
   const [tab, setTab] = useState<Tab>('organizaciones');
   const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Modal crear/editar organización
@@ -63,13 +64,29 @@ export default function SuperAdminPage() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [statsOrg, setStatsOrg] = useState<Organizacion | null>(null);
 
+  // Suscribirse a cambios de auth
   useEffect(() => {
-    if (!user || user.rol !== 'superadmin') {
+    const unsubscribe = onAuthChange((newUser) => {
+      setUser(newUser);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Cargar datos cuando usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'superadmin') {
       navigate('/login');
       return;
     }
-    loadOrganizaciones();
-  }, [user, navigate]);
+    if (!dataLoaded) {
+      loadOrganizaciones();
+      setDataLoaded(true);
+    }
+  }, [user, navigate, dataLoaded]);
 
   const loadOrganizaciones = async () => {
     setLoading(true);
@@ -227,7 +244,10 @@ export default function SuperAdminPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-300">{user?.email}</span>
-            <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
+            <button onClick={() => navigate('/')} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm cursor-pointer">
+              🏠 Inicio
+            </button>
+            <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm cursor-pointer">
               Cerrar Sesión
             </button>
           </div>
