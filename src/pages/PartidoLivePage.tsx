@@ -104,6 +104,38 @@ export function PartidoLivePage() {
   const [pendientes, setPendientes] = useState(getOfflineQueue().length);
   const [sincronizando, setSincronizando] = useState(false);
 
+  // Toast de resultado parcial
+  const [mostrarResultadoParcial, setMostrarResultadoParcial] = useState(false);
+  const [resultadoParcial, setResultadoParcial] = useState({ local: 0, visitante: 0 });
+
+  // Forzar orientación landscape en dispositivos móviles
+  useEffect(() => {
+    const lockOrientation = async () => {
+      try {
+        // Verificar si la API está disponible
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock('landscape');
+        }
+      } catch (err) {
+        // Ignorar errores (algunos navegadores no soportan esta API)
+        console.log('No se pudo bloquear la orientación:', err);
+      }
+    };
+
+    lockOrientation();
+
+    // Restaurar orientación al salir
+    return () => {
+      try {
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      } catch (err) {
+        console.log('No se pudo desbloquear la orientación:', err);
+      }
+    };
+  }, []);
+
   // Cargar datos del partido
   useEffect(() => {
     if (!id) return;
@@ -395,6 +427,13 @@ export function PartidoLivePage() {
     setProcesando(true);
     try {
       await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar, 0, null, nuevoPuntosLocal, nuevoPuntosVisitante);
+
+      // Mostrar resultado parcial en toast
+      if (!modoDescontar) {
+        setResultadoParcial({ local: nuevoPuntosLocal, visitante: nuevoPuntosVisitante });
+        setMostrarResultadoParcial(true);
+        setTimeout(() => setMostrarResultadoParcial(false), 2000);
+      }
     } catch (err) {
       // Si falla, agregar a la cola offline
       addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
@@ -746,8 +785,13 @@ export function PartidoLivePage() {
       // Registrar FIN_CUARTO con resultado parcial (solo si no es descuento)
       if (!modoDescontar) {
         await registrarAccionSistema(id, equipoLocal.id, 'FIN_CUARTO', partido.cuarto_actual, partido.puntos_local, partido.puntos_visitante);
+
+        // Mostrar resultado parcial en toast al terminar el cuarto
+        setResultadoParcial({ local: partido.puntos_local, visitante: partido.puntos_visitante });
+        setMostrarResultadoParcial(true);
+        setTimeout(() => setMostrarResultadoParcial(false), 3000);
       }
-      
+
       // Actualizar cuarto en BD
       await cambiarCuarto(id, nuevoCuarto);
       
@@ -1720,6 +1764,28 @@ export function PartidoLivePage() {
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast de Resultado Parcial */}
+      {mostrarResultadoParcial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-gray-900/95 rounded-3xl shadow-2xl p-8 border-4 border-blue-500 animate-pulse pointer-events-auto">
+            <div className="text-center">
+              <div className="text-gray-400 text-sm font-bold mb-2">RESULTADO PARCIAL</div>
+              <div className="flex items-center gap-8 justify-center">
+                <div className="text-center">
+                  <div className="text-5xl font-bold text-white mb-1">{resultadoParcial.local}</div>
+                  <div className="text-sm text-gray-400">{equipoLocal?.nombre_corto || equipoLocal?.nombre}</div>
+                </div>
+                <div className="text-4xl font-bold text-gray-500">-</div>
+                <div className="text-center">
+                  <div className="text-5xl font-bold text-white mb-1">{resultadoParcial.visitante}</div>
+                  <div className="text-sm text-gray-400">{equipoVisitante?.nombre_corto || equipoVisitante?.nombre}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
