@@ -16,6 +16,28 @@ export function MarcadorPublicoPage() {
   // Toast de marcador para todas las acciones
   const [mostrarToast, setMostrarToast] = useState(false);
   const [toastMarcador, setToastMarcador] = useState({ local: 0, visitante: 0 });
+  const [toastAccion, setToastAccion] = useState<string>('');
+
+  // Formatear tipo de acción para el toast
+  const formatearAccion = (tipo: string, valor?: number): string => {
+    switch (tipo) {
+      case 'PUNTO_1': return '+1 PUNTO';
+      case 'PUNTO_2': return '+2 PUNTOS';
+      case 'PUNTO_3': return '+3 PUNTOS';
+      case 'FALTA_PERSONAL': return 'FALTA PERSONAL';
+      case 'FALTA_TECNICA': return 'FALTA TÉCNICA';
+      case 'FALTA_ANTIDEPORTIVA': return 'FALTA ANTIDEPORTIVA';
+      case 'FALTA_DESCALIFICANTE': return 'EXPULSIÓN';
+      case 'FALTA_TECNICA_ENTRENADOR': return 'FALTA TÉCNICA DT';
+      case 'FALTA_TECNICA_BANCO': return 'FALTA TÉCNICA BANCO';
+      case 'FALTA_DESCALIFICANTE_ENTRENADOR': return 'DT EXPULSADO';
+      case 'TIEMPO_MUERTO': return 'TIEMPO MUERTO';
+      case 'SUSTITUCION': return 'CAMBIO';
+      case 'FIN_CUARTO': return `FIN CUARTO ${valor || ''}`;
+      case 'INICIO_CUARTO': return `INICIO CUARTO ${valor || ''}`;
+      default: return tipo;
+    }
+  };
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -89,6 +111,10 @@ export function MarcadorPublicoPage() {
         (payload) => {
           // Cuando se crea una nueva acción, mostrar el toast con el marcador actual
           if (payload.new && !payload.new.anulada) {
+            // Formatear la acción para mostrar
+            const tipoAccion = formatearAccion(payload.new.tipo, payload.new.valor);
+            setToastAccion(tipoAccion);
+
             // Obtener marcador actualizado
             supabase
               .from('partidos')
@@ -348,6 +374,10 @@ export function MarcadorPublicoPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="bg-gray-900/95 rounded-3xl shadow-2xl p-8 border-4 border-blue-500 animate-pulse pointer-events-auto">
             <div className="text-center">
+              {/* Tipo de acción */}
+              <div className="text-yellow-400 text-2xl font-bold mb-4">{toastAccion}</div>
+
+              {/* Marcador */}
               <div className="text-gray-400 text-sm font-bold mb-2">MARCADOR</div>
               <div className="flex items-center gap-8 justify-center">
                 <div className="text-center">
