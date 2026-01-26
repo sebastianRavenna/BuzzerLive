@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 
+// Tipos para las relaciones de Supabase
+interface EquipoRelacion {
+  nombre_corto: string;
+}
+
+interface JugadorRelacion {
+  numero_camiseta: number;
+  apellido: string;
+}
+
 interface AccionLog {
   id: string;
   tipo: string;
@@ -55,18 +65,18 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       if (data) {
         setAcciones(data.map(a => ({
           id: a.id, tipo: a.tipo, cuarto: a.cuarto, valor: a.valor,
-          equipo_nombre: (a.equipo as any)?.nombre_corto || 'Equipo',
-          jugador_numero: (a.jugador as any)?.numero_camiseta || null,
-          jugador_apellido: (a.jugador as any)?.apellido || null,
+          equipo_nombre: (a.equipo as EquipoRelacion | null)?.nombre_corto || 'Equipo',
+          jugador_numero: (a.jugador as JugadorRelacion | null)?.numero_camiseta || null,
+          jugador_apellido: (a.jugador as JugadorRelacion | null)?.apellido || null,
           timestamp_local: a.timestamp_local,
           tiros_libres: a.tiros_libres || 0,
           numero_falta: a.numero_falta || null,
           puntos_local: a.puntos_local,
           puntos_visitante: a.puntos_visitante,
-          jugador_entra_numero: (a.jugador_entra as any)?.numero_camiseta || null,
-          jugador_entra_apellido: (a.jugador_entra as any)?.apellido || null,
-          jugador_sale_numero: (a.jugador_sale as any)?.numero_camiseta || null,
-          jugador_sale_apellido: (a.jugador_sale as any)?.apellido || null,
+          jugador_entra_numero: (a.jugador_entra as JugadorRelacion | null)?.numero_camiseta || null,
+          jugador_entra_apellido: (a.jugador_entra as JugadorRelacion | null)?.apellido || null,
+          jugador_sale_numero: (a.jugador_sale as JugadorRelacion | null)?.numero_camiseta || null,
+          jugador_sale_apellido: (a.jugador_sale as JugadorRelacion | null)?.apellido || null,
         })));
       }
       setLoading(false);
@@ -97,18 +107,18 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         if (data) {
           setAcciones(prev => [{
             id: data.id, tipo: data.tipo, cuarto: data.cuarto, valor: data.valor,
-            equipo_nombre: (data.equipo as any)?.nombre_corto || 'Equipo',
-            jugador_numero: (data.jugador as any)?.numero_camiseta || null,
-            jugador_apellido: (data.jugador as any)?.apellido || null,
+            equipo_nombre: (data.equipo as EquipoRelacion | null)?.nombre_corto || 'Equipo',
+            jugador_numero: (data.jugador as JugadorRelacion | null)?.numero_camiseta || null,
+            jugador_apellido: (data.jugador as JugadorRelacion | null)?.apellido || null,
             timestamp_local: data.timestamp_local,
             tiros_libres: data.tiros_libres || 0,
             numero_falta: data.numero_falta || null,
             puntos_local: data.puntos_local,
             puntos_visitante: data.puntos_visitante,
-            jugador_entra_numero: (data.jugador_entra as any)?.numero_camiseta || null,
-            jugador_entra_apellido: (data.jugador_entra as any)?.apellido || null,
-            jugador_sale_numero: (data.jugador_sale as any)?.numero_camiseta || null,
-            jugador_sale_apellido: (data.jugador_sale as any)?.apellido || null,
+            jugador_entra_numero: (data.jugador_entra as JugadorRelacion | null)?.numero_camiseta || null,
+            jugador_entra_apellido: (data.jugador_entra as JugadorRelacion | null)?.apellido || null,
+            jugador_sale_numero: (data.jugador_sale as JugadorRelacion | null)?.numero_camiseta || null,
+            jugador_sale_apellido: (data.jugador_sale as JugadorRelacion | null)?.apellido || null,
           }, ...prev]);
         }
       })

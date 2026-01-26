@@ -188,6 +188,9 @@ export function PartidoLivePage() {
     if (!id || !equipoLocal?.id || !equipoVisitante?.id) return;
 
     async function cargarFaltasEntrenador() {
+      // Verificación adicional para TypeScript
+      if (!equipoLocal || !equipoVisitante) return;
+
       try {
         // Obtener todas las acciones de faltas del entrenador
         const { data: acciones } = await supabase
@@ -197,7 +200,7 @@ export function PartidoLivePage() {
           .eq('anulada', false)
           .in('tipo', ['FALTA_TECNICA_ENTRENADOR', 'FALTA_TECNICA_BANCO', 'FALTA_DESCALIFICANTE_ENTRENADOR']);
 
-        if (acciones && equipoLocal && equipoVisitante) {
+        if (acciones) {
           // Contar faltas por equipo
           const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal.id);
           const faltasVisitante = acciones.filter(a => a.equipo_id === equipoVisitante.id);
@@ -253,7 +256,7 @@ export function PartidoLivePage() {
   useEffect(() => {
     const unsubscribe = onConnectionChange((isOnlineNow) => {
       setOnline(isOnlineNow);
-      
+
       // Sincronizar cuando vuelve la conexión
       if (isOnlineNow && getOfflineQueue().length > 0) {
         handleSyncOffline();
@@ -261,6 +264,7 @@ export function PartidoLivePage() {
     });
 
     return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sincronizar cola offline
@@ -450,7 +454,7 @@ export function PartidoLivePage() {
     setProcesando(true);
     try {
       await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar, 0, null, nuevoPuntosLocal, nuevoPuntosVisitante);
-    } catch (err) {
+    } catch {
       // Si falla, agregar a la cola offline
       addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
       setPendientes(getOfflineQueue().length);
@@ -638,7 +642,7 @@ export function PartidoLivePage() {
     setProcesando(true);
     try {
       await registrarAccion(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento, tiros, numeroFalta);
-    } catch (err) {
+    } catch {
       addToOfflineQueue(id, equipoId, jugador.id, tipoFalta, partido.cuarto_actual, esDescuento);
       setPendientes(getOfflineQueue().length);
     } finally {
