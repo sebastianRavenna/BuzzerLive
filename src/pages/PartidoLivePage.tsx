@@ -197,7 +197,7 @@ export function PartidoLivePage() {
           .eq('anulada', false)
           .in('tipo', ['FALTA_TECNICA_ENTRENADOR', 'FALTA_TECNICA_BANCO', 'FALTA_DESCALIFICANTE_ENTRENADOR']);
 
-        if (acciones) {
+        if (acciones && equipoLocal && equipoVisitante) {
           // Contar faltas por equipo
           const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal.id);
           const faltasVisitante = acciones.filter(a => a.equipo_id === equipoVisitante.id);
