@@ -40,6 +40,25 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [acciones, setAcciones] = useState<AccionLog[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Helper para extraer datos de relaciones de Supabase
+  const getEquipoNombre = (equipo: unknown): string => {
+    if (!equipo) return 'Equipo';
+    if (Array.isArray(equipo) && equipo.length > 0) return equipo[0]?.nombre_corto || 'Equipo';
+    return (equipo as EquipoRelacion)?.nombre_corto || 'Equipo';
+  };
+
+  const getJugadorNumero = (jugador: unknown): number | null => {
+    if (!jugador) return null;
+    if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.numero_camiseta || null;
+    return (jugador as JugadorRelacion)?.numero_camiseta || null;
+  };
+
+  const getJugadorApellido = (jugador: unknown): string | null => {
+    if (!jugador) return null;
+    if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.apellido || null;
+    return (jugador as JugadorRelacion)?.apellido || null;
+  };
+
   useEffect(() => {
     async function cargarAcciones() {
       const { data, error } = await supabase
@@ -65,18 +84,18 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       if (data) {
         setAcciones(data.map(a => ({
           id: a.id, tipo: a.tipo, cuarto: a.cuarto, valor: a.valor,
-          equipo_nombre: (a.equipo as EquipoRelacion | null)?.nombre_corto || 'Equipo',
-          jugador_numero: (a.jugador as JugadorRelacion | null)?.numero_camiseta || null,
-          jugador_apellido: (a.jugador as JugadorRelacion | null)?.apellido || null,
+          equipo_nombre: getEquipoNombre(a.equipo),
+          jugador_numero: getJugadorNumero(a.jugador),
+          jugador_apellido: getJugadorApellido(a.jugador),
           timestamp_local: a.timestamp_local,
           tiros_libres: a.tiros_libres || 0,
           numero_falta: a.numero_falta || null,
           puntos_local: a.puntos_local,
           puntos_visitante: a.puntos_visitante,
-          jugador_entra_numero: (a.jugador_entra as JugadorRelacion | null)?.numero_camiseta || null,
-          jugador_entra_apellido: (a.jugador_entra as JugadorRelacion | null)?.apellido || null,
-          jugador_sale_numero: (a.jugador_sale as JugadorRelacion | null)?.numero_camiseta || null,
-          jugador_sale_apellido: (a.jugador_sale as JugadorRelacion | null)?.apellido || null,
+          jugador_entra_numero: getJugadorNumero(a.jugador_entra),
+          jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
+          jugador_sale_numero: getJugadorNumero(a.jugador_sale),
+          jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
         })));
       }
       setLoading(false);
@@ -107,18 +126,18 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         if (data) {
           setAcciones(prev => [{
             id: data.id, tipo: data.tipo, cuarto: data.cuarto, valor: data.valor,
-            equipo_nombre: (data.equipo as EquipoRelacion | null)?.nombre_corto || 'Equipo',
-            jugador_numero: (data.jugador as JugadorRelacion | null)?.numero_camiseta || null,
-            jugador_apellido: (data.jugador as JugadorRelacion | null)?.apellido || null,
+            equipo_nombre: getEquipoNombre(data.equipo),
+            jugador_numero: getJugadorNumero(data.jugador),
+            jugador_apellido: getJugadorApellido(data.jugador),
             timestamp_local: data.timestamp_local,
             tiros_libres: data.tiros_libres || 0,
             numero_falta: data.numero_falta || null,
             puntos_local: data.puntos_local,
             puntos_visitante: data.puntos_visitante,
-            jugador_entra_numero: (data.jugador_entra as JugadorRelacion | null)?.numero_camiseta || null,
-            jugador_entra_apellido: (data.jugador_entra as JugadorRelacion | null)?.apellido || null,
-            jugador_sale_numero: (data.jugador_sale as JugadorRelacion | null)?.numero_camiseta || null,
-            jugador_sale_apellido: (data.jugador_sale as JugadorRelacion | null)?.apellido || null,
+            jugador_entra_numero: getJugadorNumero(data.jugador_entra),
+            jugador_entra_apellido: getJugadorApellido(data.jugador_entra),
+            jugador_sale_numero: getJugadorNumero(data.jugador_sale),
+            jugador_sale_apellido: getJugadorApellido(data.jugador_sale),
           }, ...prev]);
         }
       })
