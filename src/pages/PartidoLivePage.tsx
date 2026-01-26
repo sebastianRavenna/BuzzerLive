@@ -109,7 +109,7 @@ export function PartidoLivePage() {
   const [resultadoParcial, setResultadoParcial] = useState({ local: 0, visitante: 0 });
 
   // Forzar orientación landscape en dispositivos móviles
-  useEffect(() => {
+  /*useEffect(() => {
     const lockOrientation = async () => {
       try {
         // Verificar si la API está disponible
@@ -134,7 +134,7 @@ export function PartidoLivePage() {
         console.log('No se pudo desbloquear la orientación:', err);
       }
     };
-  }, []);
+  }, []);*/
 
   // Cargar datos del partido
   useEffect(() => {
