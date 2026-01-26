@@ -360,6 +360,11 @@ export function PartidoLivePage() {
       return;
     }
 
+    if (!equipoLocal || !equipoVisitante) {
+      setError('Error: equipos no cargados');
+      return;
+    }
+
     // Verificar si algún equipo tiene menos de 5 jugadores citados
     const mensajesAdvertencia: string[] = [];
     if (citadosLocal.size < 5) {

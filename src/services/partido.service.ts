@@ -213,17 +213,13 @@ async function descontarAccion(
   if (errorPartido) throw errorPartido;
   
   const esLocal = equipoId === partido.equipo_local_id;
-  
+
   // Calcular valor a descontar
   let valorPunto = 0;
-  let esFalta = false;
-  
+
   if (tipo === 'PUNTO_1') valorPunto = 1;
   else if (tipo === 'PUNTO_2') valorPunto = 2;
   else if (tipo === 'PUNTO_3') valorPunto = 3;
-  else if (tipo === 'FALTA_PERSONAL' || tipo === 'FALTA_TECNICA' || tipo === 'FALTA_ANTIDEPORTIVA' || tipo === 'FALTA_DESCALIFICANTE') {
-    esFalta = true;
-  }
   
   // Actualizar partido
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
