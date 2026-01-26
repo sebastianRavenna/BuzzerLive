@@ -277,27 +277,33 @@ async function descontarAccion(
     }
   }
   
-  // Registrar la acción de descuento en el log (con valor negativo)
-  const valorNegativo = valorPunto > 0 ? -valorPunto : esFalta ? -1 : 0;
-  
-  const { error: errorInsert } = await supabase
+  // Buscar la última acción no anulada del jugador con el mismo tipo y marcarla como anulada
+  const { data: acciones, error: errorBusqueda } = await supabase
     .from('acciones')
-    .insert({
-      partido_id: partidoId,
-      equipo_id: equipoId,
-      jugador_id: jugadorId,
-      tipo: tipo,
-      cuarto: cuarto,
-      valor: valorNegativo,
-      timestamp_local: new Date().toISOString(),
-      cliente_id: getClienteId(),
-      anulada: false,
-    });
-  
-  if (errorInsert) {
-    console.error('Error insertando descuento en log:', errorInsert);
+    .select('*')
+    .eq('partido_id', partidoId)
+    .eq('equipo_id', equipoId)
+    .eq('jugador_id', jugadorId)
+    .eq('tipo', tipo)
+    .eq('anulada', false)
+    .order('timestamp_local', { ascending: false })
+    .limit(1);
+
+  if (errorBusqueda) throw errorBusqueda;
+
+  // Si encontramos una acción, marcarla como anulada
+  if (acciones && acciones.length > 0) {
+    const { error: errorAnular } = await supabase
+      .from('acciones')
+      .update({ anulada: true })
+      .eq('id', acciones[0].id);
+
+    if (errorAnular) {
+      console.error('Error anulando acción:', errorAnular);
+      throw errorAnular;
+    }
   }
-  
+
   return true;
 }
 

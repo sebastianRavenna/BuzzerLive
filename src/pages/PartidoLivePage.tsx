@@ -359,7 +359,23 @@ export function PartidoLivePage() {
       setError('Debés seleccionar 5 titulares por equipo');
       return;
     }
-    
+
+    // Verificar si algún equipo tiene menos de 5 jugadores citados
+    const mensajesAdvertencia: string[] = [];
+    if (citadosLocal.size < 5) {
+      mensajesAdvertencia.push(`${equipoLocal.nombre_corto || equipoLocal.nombre} no completa el mínimo de jugadores necesarios (${citadosLocal.size}/5)`);
+    }
+    if (citadosVisitante.size < 5) {
+      mensajesAdvertencia.push(`${equipoVisitante.nombre_corto || equipoVisitante.nombre} no completa el mínimo de jugadores necesarios (${citadosVisitante.size}/5)`);
+    }
+
+    if (mensajesAdvertencia.length > 0) {
+      const mensaje = mensajesAdvertencia.join('\n');
+      if (!confirm(`ADVERTENCIA:\n\n${mensaje}\n\n¿Desea continuar de todas formas?`)) {
+        return;
+      }
+    }
+
     setProcesando(true);
     try {
       await iniciarPartido(id);
@@ -965,11 +981,12 @@ export function PartidoLivePage() {
     setCitados(nuevosCitados);
   };
 
-  // Selección de citados (12 por equipo)
+  // Selección de citados (1 a 12 por equipo)
   if (fase === 'seleccion-citados') {
     const localNecesitaSeleccion = jugadoresLocal.length > 12;
     const visitanteNecesitaSeleccion = jugadoresVisitante.length > 12;
-    const puedeAvanzar = citadosLocal.size === 12 && citadosVisitante.size === 12;
+    const puedeAvanzar = citadosLocal.size >= 1 && citadosLocal.size <= 12 &&
+                         citadosVisitante.size >= 1 && citadosVisitante.size <= 12;
     
     return (
       <div className="min-h-screen bg-gray-900 p-4">
@@ -985,10 +1002,10 @@ export function PartidoLivePage() {
         </button>
         
         <h1 className="text-2xl font-bold text-white text-center mb-2">
-          Seleccionar Citados (12 por equipo)
+          Seleccionar Citados (1 a 12 por equipo)
         </h1>
         <p className="text-gray-400 text-center mb-6">
-          Seleccione los 12 jugadores que participarán del partido
+          Seleccione entre 1 y 12 jugadores que participarán del partido
         </p>
         
         <div className="grid grid-cols-2 gap-8 max-w-6xl mx-auto">
@@ -996,7 +1013,7 @@ export function PartidoLivePage() {
           <div>
             <h2 className="text-xl font-bold text-white mb-4 text-center">
               {equipoLocal.nombre_corto || equipoLocal.nombre}
-              <span className={`ml-2 text-sm ${citadosLocal.size === 12 ? 'text-green-400' : 'text-gray-400'}`}>
+              <span className={`ml-2 text-sm ${citadosLocal.size >= 1 && citadosLocal.size <= 12 ? 'text-green-400' : 'text-gray-400'}`}>
                 ({citadosLocal.size}/12)
               </span>
             </h2>
@@ -1031,7 +1048,7 @@ export function PartidoLivePage() {
           <div>
             <h2 className="text-xl font-bold text-white mb-4 text-center">
               {equipoVisitante.nombre_corto || equipoVisitante.nombre}
-              <span className={`ml-2 text-sm ${citadosVisitante.size === 12 ? 'text-green-400' : 'text-gray-400'}`}>
+              <span className={`ml-2 text-sm ${citadosVisitante.size >= 1 && citadosVisitante.size <= 12 ? 'text-green-400' : 'text-gray-400'}`}>
                 ({citadosVisitante.size}/12)
               </span>
             </h2>
@@ -1083,15 +1100,15 @@ export function PartidoLivePage() {
       <div className="min-h-screen bg-gray-900 p-4">
         {/* Botón volver */}
         <button
-          onClick={() => navigate('/partidos')}
+          onClick={() => setFase('seleccion-citados')}
           className="mb-4 inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Volver a partidos
+          Volver a Seleccionar Citados
         </button>
-        
+
         <h1 className="text-2xl font-bold text-white text-center mb-6">
           Seleccionar Titulares (5 por equipo)
         </h1>
