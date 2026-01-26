@@ -18,26 +18,56 @@ export function HomePage() {
       return;
     }
 
+    let isMounted = true;
+
     async function fetchData() {
-      const { data: enVivo } = await supabase
-        .from('marcador_partido')
-        .select('*')
-        .eq('estado', 'EN_CURSO')
-        .limit(5);
+      try {
+        // Pequeño delay para asegurar que Supabase esté completamente inicializado
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-      const { data: finalizados } = await supabase
-        .from('marcador_partido')
-        .select('*')
-        .eq('estado', 'FINALIZADO')
-        .order('fecha', { ascending: false })
-        .limit(5);
+        if (!isMounted) return;
 
-      setPartidosEnVivo(enVivo || []);
-      setUltimosResultados(finalizados || []);
-      setLoading(false);
+        const { data: enVivo, error: errorEnVivo } = await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'EN_CURSO')
+          .limit(5);
+
+        if (errorEnVivo) {
+          console.error('Error cargando partidos en vivo:', errorEnVivo);
+        }
+
+        if (!isMounted) return;
+
+        const { data: finalizados, error: errorFinalizados } = await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'FINALIZADO')
+          .order('fecha', { ascending: false })
+          .limit(5);
+
+        if (errorFinalizados) {
+          console.error('Error cargando resultados:', errorFinalizados);
+        }
+
+        if (!isMounted) return;
+
+        setPartidosEnVivo(enVivo || []);
+        setUltimosResultados(finalizados || []);
+      } catch (error) {
+        console.error('Error en fetchData:', error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
     fetchData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [configured]);
 
   const handleLoginClick = () => {

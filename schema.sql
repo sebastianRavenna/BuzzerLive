@@ -37,9 +37,13 @@ CREATE TYPE tipo_accion AS ENUM (
     'FALTA_TECNICA',     -- Falta técnica
     'FALTA_ANTIDEPORTIVA', -- Falta antideportiva
     'FALTA_DESCALIFICANTE', -- Falta descalificante
+    'FALTA_TECNICA_ENTRENADOR', -- Falta técnica del entrenador
+    'FALTA_TECNICA_BANCO', -- Falta técnica del banco
+    'FALTA_DESCALIFICANTE_ENTRENADOR', -- Falta descalificante del entrenador
     'TIEMPO_MUERTO',     -- Timeout pedido
     'INICIO_CUARTO',     -- Marca inicio de período
-    'FIN_CUARTO'         -- Marca fin de período
+    'FIN_CUARTO',        -- Marca fin de período
+    'SUSTITUCION'        -- Sustitución de jugador
 );
 
 -- ============================================
@@ -157,20 +161,24 @@ CREATE TABLE acciones (
     partido_id UUID NOT NULL REFERENCES partidos(id) ON DELETE CASCADE,
     equipo_id UUID NOT NULL REFERENCES equipos(id),
     jugador_id UUID REFERENCES jugadores(id),  -- NULL para acciones de equipo
-    
+
     tipo tipo_accion NOT NULL,
     cuarto SMALLINT NOT NULL,
     valor SMALLINT DEFAULT 0,          -- Puntos sumados (1, 2, 3) o 0 para faltas
-    
+
     -- Para sincronización offline
     timestamp_local TIMESTAMPTZ NOT NULL,  -- Cuándo se registró en el dispositivo
     timestamp_servidor TIMESTAMPTZ DEFAULT NOW(),  -- Cuándo llegó al servidor
     cliente_id VARCHAR(50),            -- ID del dispositivo que registró
-    
+
+    -- Para sustituciones
+    jugador_entra_id UUID REFERENCES jugadores(id),  -- Jugador que entra en sustitución
+    jugador_sale_id UUID REFERENCES jugadores(id),   -- Jugador que sale en sustitución
+
     -- Metadata
     anulada BOOLEAN DEFAULT FALSE,     -- Para correcciones sin borrar
     notas TEXT,
-    
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
