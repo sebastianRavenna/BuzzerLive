@@ -13,6 +13,10 @@ export function MarcadorPublicoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Toast de marcador para todas las acciones
+  const [mostrarToast, setMostrarToast] = useState(false);
+  const [toastMarcador, setToastMarcador] = useState({ local: 0, visitante: 0 });
+
   // Cargar datos iniciales
   useEffect(() => {
     if (!id) return;
@@ -72,6 +76,33 @@ export function MarcadorPublicoPage() {
         },
         (payload) => {
           setPartido(prev => prev ? { ...prev, ...payload.new } : null);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'acciones',
+          filter: `partido_id=eq.${id}`,
+        },
+        (payload) => {
+          // Cuando se crea una nueva acción, mostrar el toast con el marcador actual
+          if (payload.new && !payload.new.anulada) {
+            // Obtener marcador actualizado
+            supabase
+              .from('partidos')
+              .select('puntos_local, puntos_visitante')
+              .eq('id', id)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  setToastMarcador({ local: data.puntos_local, visitante: data.puntos_visitante });
+                  setMostrarToast(true);
+                  setTimeout(() => setMostrarToast(false), 2000);
+                }
+              });
+          }
         }
       )
       .subscribe();
@@ -311,7 +342,29 @@ export function MarcadorPublicoPage() {
           </div>
         </div>
       </main>
-      
+
+      {/* Toast de Marcador - Aparece en todas las acciones */}
+      {mostrarToast && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-gray-900/95 rounded-3xl shadow-2xl p-8 border-4 border-blue-500 animate-pulse pointer-events-auto">
+            <div className="text-center">
+              <div className="text-gray-400 text-sm font-bold mb-2">MARCADOR</div>
+              <div className="flex items-center gap-8 justify-center">
+                <div className="text-center">
+                  <div className="text-5xl font-bold text-white mb-1">{toastMarcador.local}</div>
+                  <div className="text-sm text-gray-400">{equipoLocal?.nombre_corto || equipoLocal?.nombre}</div>
+                </div>
+                <div className="text-4xl font-bold text-gray-500">-</div>
+                <div className="text-center">
+                  <div className="text-5xl font-bold text-white mb-1">{toastMarcador.visitante}</div>
+                  <div className="text-sm text-gray-400">{equipoVisitante?.nombre_corto || equipoVisitante?.nombre}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="bg-gray-800/50 p-4 text-center text-gray-500 text-sm">
         Powered by <span className="text-white font-medium">BuzzerLive</span>

@@ -104,38 +104,6 @@ export function PartidoLivePage() {
   const [pendientes, setPendientes] = useState(getOfflineQueue().length);
   const [sincronizando, setSincronizando] = useState(false);
 
-  // Toast de resultado parcial
-  const [mostrarResultadoParcial, setMostrarResultadoParcial] = useState(false);
-  const [resultadoParcial, setResultadoParcial] = useState({ local: 0, visitante: 0 });
-
-  // Forzar orientación landscape en dispositivos móviles
-  /*useEffect(() => {
-    const lockOrientation = async () => {
-      try {
-        // Verificar si la API está disponible
-        if (screen.orientation && screen.orientation.lock) {
-          await screen.orientation.lock('landscape');
-        }
-      } catch (err) {
-        // Ignorar errores (algunos navegadores no soportan esta API)
-        console.log('No se pudo bloquear la orientación:', err);
-      }
-    };
-
-    lockOrientation();
-
-    // Restaurar orientación al salir
-    return () => {
-      try {
-        if (screen.orientation && screen.orientation.unlock) {
-          screen.orientation.unlock();
-        }
-      } catch (err) {
-        console.log('No se pudo desbloquear la orientación:', err);
-      }
-    };
-  }, []);*/
-
   // Cargar datos del partido
   useEffect(() => {
     if (!id) return;
@@ -213,6 +181,61 @@ export function PartidoLivePage() {
     }
 
     cargarPartido();
+  }, [id]);
+
+  // Cargar estado de faltas del entrenador desde las acciones (solo una vez al inicio)
+  useEffect(() => {
+    if (!id || !equipoLocal?.id || !equipoVisitante?.id) return;
+
+    async function cargarFaltasEntrenador() {
+      try {
+        // Obtener todas las acciones de faltas del entrenador
+        const { data: acciones } = await supabase
+          .from('acciones')
+          .select('equipo_id, tipo')
+          .eq('partido_id', id)
+          .eq('anulada', false)
+          .in('tipo', ['FALTA_TECNICA_ENTRENADOR', 'FALTA_TECNICA_BANCO', 'FALTA_DESCALIFICANTE_ENTRENADOR']);
+
+        if (acciones) {
+          // Contar faltas por equipo
+          const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal.id);
+          const faltasVisitante = acciones.filter(a => a.equipo_id === equipoVisitante.id);
+
+          // Reconstruir estado del entrenador local
+          const ftEntrenadorLocal = faltasLocal.filter(a => a.tipo === 'FALTA_TECNICA_ENTRENADOR').length;
+          const ftBancoLocal = faltasLocal.filter(a => a.tipo === 'FALTA_TECNICA_BANCO').length;
+          const expulsadoDirectoLocal = faltasLocal.some(a => a.tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR');
+          const descalificadoLocal = expulsadoDirectoLocal || ftEntrenadorLocal >= 2 || (ftEntrenadorLocal + ftBancoLocal) >= 3;
+
+          setEntrenadorLocal({
+            faltasTecnicasEntrenador: ftEntrenadorLocal,
+            faltasTecnicasBanco: ftBancoLocal,
+            expulsadoDirecto: expulsadoDirectoLocal,
+            descalificado: descalificadoLocal,
+          });
+
+          // Reconstruir estado del entrenador visitante
+          const ftEntrenadorVisitante = faltasVisitante.filter(a => a.tipo === 'FALTA_TECNICA_ENTRENADOR').length;
+          const ftBancoVisitante = faltasVisitante.filter(a => a.tipo === 'FALTA_TECNICA_BANCO').length;
+          const expulsadoDirectoVisitante = faltasVisitante.some(a => a.tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR');
+          const descalificadoVisitante = expulsadoDirectoVisitante || ftEntrenadorVisitante >= 2 || (ftEntrenadorVisitante + ftBancoVisitante) >= 3;
+
+          setEntrenadorVisitante({
+            faltasTecnicasEntrenador: ftEntrenadorVisitante,
+            faltasTecnicasBanco: ftBancoVisitante,
+            expulsadoDirecto: expulsadoDirectoVisitante,
+            descalificado: descalificadoVisitante,
+          });
+        }
+      } catch (err) {
+        console.error('Error cargando faltas del entrenador:', err);
+      }
+    }
+
+    cargarFaltasEntrenador();
+    // Solo ejecutar cuando se carga el partido (id, equipoLocal.id, equipoVisitante.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Suscribirse a cambios en tiempo real
@@ -427,13 +450,6 @@ export function PartidoLivePage() {
     setProcesando(true);
     try {
       await registrarAccion(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar, 0, null, nuevoPuntosLocal, nuevoPuntosVisitante);
-
-      // Mostrar resultado parcial en toast
-      if (!modoDescontar) {
-        setResultadoParcial({ local: nuevoPuntosLocal, visitante: nuevoPuntosVisitante });
-        setMostrarResultadoParcial(true);
-        setTimeout(() => setMostrarResultadoParcial(false), 2000);
-      }
     } catch (err) {
       // Si falla, agregar a la cola offline
       addToOfflineQueue(id, equipoId, jugador.id, tipo, partido.cuarto_actual, modoDescontar);
@@ -785,11 +801,6 @@ export function PartidoLivePage() {
       // Registrar FIN_CUARTO con resultado parcial (solo si no es descuento)
       if (!modoDescontar) {
         await registrarAccionSistema(id, equipoLocal.id, 'FIN_CUARTO', partido.cuarto_actual, partido.puntos_local, partido.puntos_visitante);
-
-        // Mostrar resultado parcial en toast al terminar el cuarto
-        setResultadoParcial({ local: partido.puntos_local, visitante: partido.puntos_visitante });
-        setMostrarResultadoParcial(true);
-        setTimeout(() => setMostrarResultadoParcial(false), 3000);
       }
 
       // Actualizar cuarto en BD
@@ -1764,28 +1775,6 @@ export function PartidoLivePage() {
             >
               Cancelar
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Toast de Resultado Parcial */}
-      {mostrarResultadoParcial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="bg-gray-900/95 rounded-3xl shadow-2xl p-8 border-4 border-blue-500 animate-pulse pointer-events-auto">
-            <div className="text-center">
-              <div className="text-gray-400 text-sm font-bold mb-2">RESULTADO PARCIAL</div>
-              <div className="flex items-center gap-8 justify-center">
-                <div className="text-center">
-                  <div className="text-5xl font-bold text-white mb-1">{resultadoParcial.local}</div>
-                  <div className="text-sm text-gray-400">{equipoLocal?.nombre_corto || equipoLocal?.nombre}</div>
-                </div>
-                <div className="text-4xl font-bold text-gray-500">-</div>
-                <div className="text-center">
-                  <div className="text-5xl font-bold text-white mb-1">{resultadoParcial.visitante}</div>
-                  <div className="text-sm text-gray-400">{equipoVisitante?.nombre_corto || equipoVisitante?.nombre}</div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
