@@ -176,13 +176,14 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
     return { success: false, error: 'No se puede eliminar: tiene partidos asociados' };
   }
 
-  // Eliminar equipos del torneo primero (aunque ON DELETE CASCADE lo haría automáticamente)
-  const { error: equiposError } = await supabase.from('equipos').delete().eq('torneo_id', id);
+  // Eliminar equipos del torneo primero (tabla de relación torneo_equipos)
+  const { error: equiposError } = await supabase.from('torneo_equipos').delete().eq('torneo_id', id);
 
   if (equiposError) {
-    return { success: false, error: `Error al eliminar equipos: ${equiposError.message}` };
+    return { success: false, error: `Error al eliminar equipos del torneo: ${equiposError.message}` };
   }
 
+  // Eliminar el torneo
   const { error } = await supabase
     .from('torneos')
     .delete()
