@@ -316,8 +316,7 @@ export async function generarFixture(
   }[] = [];
 
   const fechaBase = torneo.fecha_inicio ? new Date(torneo.fecha_inicio) : new Date();
-  let fechaActual = new Date(fechaBase);
-  let fechaNum = 1;
+  const fechaActual = new Date(fechaBase);
 
   // Round-robin: todos contra todos
   for (let i = 0; i < equipos.length; i++) {
@@ -354,7 +353,6 @@ export async function generarFixture(
     }
     // Avanzar fecha cada ronda
     fechaActual.setDate(fechaActual.getDate() + 7);
-    fechaNum++;
   }
 
   // Insertar partidos
