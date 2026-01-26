@@ -28,6 +28,7 @@ interface AccionLog {
   jugador_entra_apellido: string | null;
   jugador_sale_numero: number | null;
   jugador_sale_apellido: string | null;
+  anulada: boolean;
 }
 
 interface LogAccionesProps {
@@ -65,14 +66,13 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         .from('acciones')
         .select(`
           id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
-          puntos_local, puntos_visitante,
+          puntos_local, puntos_visitante, anulada,
           equipo:equipos(nombre_corto),
           jugador:jugador_id(numero_camiseta, apellido),
           jugador_entra:jugador_entra_id(numero_camiseta, apellido),
           jugador_sale:jugador_sale_id(numero_camiseta, apellido)
         `)
         .eq('partido_id', partidoId)
-        .eq('anulada', false)
         .order('timestamp_local', { ascending: false });
 
       if (error) {
@@ -96,6 +96,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
           jugador_sale_numero: getJugadorNumero(a.jugador_sale),
           jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
+          anulada: a.anulada || false,
         })));
       }
       setLoading(false);
@@ -114,7 +115,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
           .from('acciones')
           .select(`
             id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
-            puntos_local, puntos_visitante,
+            puntos_local, puntos_visitante, anulada,
             equipo:equipos(nombre_corto),
             jugador:jugador_id(numero_camiseta, apellido),
             jugador_entra:jugador_entra_id(numero_camiseta, apellido),
@@ -138,7 +139,19 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
             jugador_entra_apellido: getJugadorApellido(data.jugador_entra),
             jugador_sale_numero: getJugadorNumero(data.jugador_sale),
             jugador_sale_apellido: getJugadorApellido(data.jugador_sale),
+            anulada: data.anulada || false,
           }, ...prev]);
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'acciones',
+        filter: `partido_id=eq.${partidoId}`,
+      }, (payload) => {
+        // Cuando una acción se actualiza (ej: se marca como anulada), actualizar en el estado
+        if (payload.new) {
+          setAcciones(prev => prev.map(a =>
+            a.id === payload.new.id ? { ...a, anulada: payload.new.anulada || false } : a
+          ));
         }
       })
       .subscribe();
@@ -146,9 +159,8 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     return () => { supabase.removeChannel(channel); };
   }, [partidoId]);
 
-  const formatTipo = (accion: AccionLog): { texto: string; tachado: boolean } => {
+  const formatTipo = (accion: AccionLog): string => {
     const { tipo, valor, numero_falta, tiros_libres } = accion;
-    const esDescuento = valor < 0;
     const buildFaltaText = (nombre: string): string => {
       let texto = nombre;
       if (numero_falta) texto = `${numero_falta}ª ${nombre}`;
@@ -173,7 +185,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       case 'INICIO_CUARTO': texto = `INICIO Q${valor || ''}`; break;
       default: texto = tipo;
     }
-    return { texto, tachado: esDescuento };
+    return texto;
   };
 
   const getColorClase = (tipo: string): string => {
@@ -207,8 +219,9 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       {!compact && <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Acciones</h3>}
       <div className={`space-y-1.5 ${compact ? 'max-h-32' : 'max-h-[400px]'} overflow-y-auto`}>
         {acciones.map((accion) => {
-          const { texto, tachado } = formatTipo(accion);
-          const mostrarParcial = (accion.tipo.startsWith('PUNTO') || accion.tipo === 'FIN_CUARTO') && 
+          const texto = formatTipo(accion);
+          const tachado = accion.anulada;
+          const mostrarParcial = (accion.tipo.startsWith('PUNTO') || accion.tipo === 'FIN_CUARTO') &&
             !tachado && accion.puntos_local !== null && accion.puntos_visitante !== null;
           
           return (
