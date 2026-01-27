@@ -21,13 +21,15 @@ import {
   syncOfflineQueue
 } from '../services/offlineQueue';
 import { LogAcciones } from '../components/common/LogAcciones';
-import type { 
-  Partido, 
-  Equipo, 
-  JugadorEnPartido, 
+import { getEntrenadoresByClub } from '../services/club.service';
+import type {
+  Partido,
+  Equipo,
+  JugadorEnPartido,
   TipoAccion,
   EntrenadorEstado,
-  TipoFaltaEntrenador
+  TipoFaltaEntrenador,
+  Entrenador
 } from '../types';
 
 type Fase = 'cargando' | 'seleccion-citados' | 'seleccion-titulares' | 'en-juego' | 'finalizado';
@@ -50,6 +52,12 @@ export function PartidoLivePage() {
   // Citados (IDs de los 12 jugadores citados para el partido)
   const [citadosLocal, setCitadosLocal] = useState<Set<string>>(new Set());
   const [citadosVisitante, setCitadosVisitante] = useState<Set<string>>(new Set());
+
+  // Entrenadores
+  const [entrenadoresLocal, setEntrenadoresLocal] = useState<Entrenador[]>([]);
+  const [entrenadoresVisitante, setEntrenadoresVisitante] = useState<Entrenador[]>([]);
+  const [entrenadoresSeleccionadosLocal, setEntrenadoresSeleccionadosLocal] = useState<Set<string>>(new Set());
+  const [entrenadoresSeleccionadosVisitante, setEntrenadoresSeleccionadosVisitante] = useState<Set<string>>(new Set());
   
   // Estado de UI
   const [fase, setFase] = useState<Fase>('cargando');
@@ -116,7 +124,17 @@ export function PartidoLivePage() {
         setEquipoVisitante(data.equipoVisitante);
         setJugadoresLocal(data.jugadoresLocal);
         setJugadoresVisitante(data.jugadoresVisitante);
-        
+
+        // Cargar entrenadores de ambos equipos
+        if (data.equipoLocal.club_id) {
+          const entrenadoresL = await getEntrenadoresByClub(data.equipoLocal.club_id);
+          setEntrenadoresLocal(entrenadoresL);
+        }
+        if (data.equipoVisitante.club_id) {
+          const entrenadoresV = await getEntrenadoresByClub(data.equipoVisitante.club_id);
+          setEntrenadoresVisitante(entrenadoresV);
+        }
+
         if (data.partido.estado === 'PROGRAMADO') {
           // Verificar si algún equipo tiene más de 12 jugadores
           const necesitaCitadosLocal = data.jugadoresLocal.length > 12;
@@ -384,6 +402,26 @@ export function PartidoLivePage() {
     setProcesando(true);
     try {
       await iniciarPartido(id);
+
+      // Guardar entrenadores seleccionados (primer entrenador de cada equipo)
+      const entrenadorLocalId = entrenadoresSeleccionadosLocal.size > 0
+        ? Array.from(entrenadoresSeleccionadosLocal)[0]
+        : null;
+      const entrenadorVisitanteId = entrenadoresSeleccionadosVisitante.size > 0
+        ? Array.from(entrenadoresSeleccionadosVisitante)[0]
+        : null;
+
+      if (entrenadorLocalId || entrenadorVisitanteId) {
+        const updates: any = {};
+        if (entrenadorLocalId) updates.entrenador_local_id = entrenadorLocalId;
+        if (entrenadorVisitanteId) updates.entrenador_visitante_id = entrenadorVisitanteId;
+
+        await supabase
+          .from('partidos')
+          .update(updates)
+          .eq('id', id);
+      }
+
       setPartido(prev => prev ? { ...prev, estado: 'EN_CURSO', cuarto_actual: 1 } : null);
       setFase('en-juego');
     } catch (err) {
@@ -976,7 +1014,7 @@ export function PartidoLivePage() {
   const toggleCitado = (jugadorId: string, esLocal: boolean) => {
     const setCitados = esLocal ? setCitadosLocal : setCitadosVisitante;
     const citados = esLocal ? citadosLocal : citadosVisitante;
-    
+
     const nuevosCitados = new Set(citados);
     if (nuevosCitados.has(jugadorId)) {
       nuevosCitados.delete(jugadorId);
@@ -984,6 +1022,20 @@ export function PartidoLivePage() {
       nuevosCitados.add(jugadorId);
     }
     setCitados(nuevosCitados);
+  };
+
+  // Función para toggle de entrenador
+  const toggleEntrenador = (entrenadorId: string, esLocal: boolean) => {
+    const setSeleccionados = esLocal ? setEntrenadoresSeleccionadosLocal : setEntrenadoresSeleccionadosVisitante;
+    const seleccionados = esLocal ? entrenadoresSeleccionadosLocal : entrenadoresSeleccionadosVisitante;
+
+    const nuevosSeleccionados = new Set(seleccionados);
+    if (nuevosSeleccionados.has(entrenadorId)) {
+      nuevosSeleccionados.delete(entrenadorId);
+    } else {
+      nuevosSeleccionados.add(entrenadorId);
+    }
+    setSeleccionados(nuevosSeleccionados);
   };
 
   // Selección de citados (1 a 12 por equipo)
@@ -1084,7 +1136,89 @@ export function PartidoLivePage() {
             )}
           </div>
         </div>
-        
+
+        {/* Sección de Entrenadores */}
+        <div className="mt-8 max-w-6xl mx-auto">
+          <h2 className="text-xl font-bold text-white text-center mb-4">Seleccionar Entrenadores</h2>
+          <p className="text-gray-400 text-center mb-6 text-sm">Seleccione los entrenadores que dirigirán el partido</p>
+
+          <div className="grid grid-cols-2 gap-8">
+            {/* Entrenadores Local */}
+            <div>
+              <h3 className="text-lg font-bold text-white mb-3 text-center">
+                {equipoLocal.nombre_corto || equipoLocal.nombre}
+                <span className="ml-2 text-sm text-gray-400">
+                  ({entrenadoresSeleccionadosLocal.size} seleccionado{entrenadoresSeleccionadosLocal.size !== 1 ? 's' : ''})
+                </span>
+              </h3>
+              {entrenadoresLocal.length > 0 ? (
+                <div className="space-y-2">
+                  {entrenadoresLocal.map(entrenador => (
+                    <button
+                      key={entrenador.id}
+                      onClick={() => toggleEntrenador(entrenador.id, true)}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        entrenadoresSeleccionadosLocal.has(entrenador.id)
+                          ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
+                          : 'bg-gray-800 border-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl">👔</div>
+                        <div>
+                          <div className="text-white font-medium">{entrenador.nombre} {entrenador.apellido}</div>
+                          {entrenador.licencia && <div className="text-xs text-gray-400">Lic: {entrenador.licencia}</div>}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4 text-sm">
+                  No hay entrenadores registrados para este equipo
+                </div>
+              )}
+            </div>
+
+            {/* Entrenadores Visitante */}
+            <div>
+              <h3 className="text-lg font-bold text-white mb-3 text-center">
+                {equipoVisitante.nombre_corto || equipoVisitante.nombre}
+                <span className="ml-2 text-sm text-gray-400">
+                  ({entrenadoresSeleccionadosVisitante.size} seleccionado{entrenadoresSeleccionadosVisitante.size !== 1 ? 's' : ''})
+                </span>
+              </h3>
+              {entrenadoresVisitante.length > 0 ? (
+                <div className="space-y-2">
+                  {entrenadoresVisitante.map(entrenador => (
+                    <button
+                      key={entrenador.id}
+                      onClick={() => toggleEntrenador(entrenador.id, false)}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        entrenadoresSeleccionadosVisitante.has(entrenador.id)
+                          ? 'bg-blue-900 border-blue-500 ring-2 ring-blue-400'
+                          : 'bg-gray-800 border-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl">👔</div>
+                        <div>
+                          <div className="text-white font-medium">{entrenador.nombre} {entrenador.apellido}</div>
+                          {entrenador.licencia && <div className="text-xs text-gray-400">Lic: {entrenador.licencia}</div>}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4 text-sm">
+                  No hay entrenadores registrados para este equipo
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Botón continuar */}
         <div className="mt-8 text-center">
           <button
@@ -1348,6 +1482,7 @@ export function PartidoLivePage() {
             equipo={equipoLocal}
             titulares={jugadoresTitularesLocal}
             suplentes={jugadoresSuplentesLocal}
+            entrenadores={entrenadoresLocal.filter(e => entrenadoresSeleccionadosLocal.has(e.id))}
             jugadorSeleccionado={jugadorSeleccionadoLocal}
             onSeleccionarJugador={setJugadorSeleccionadoLocal}
             onPunto={(valor) => handlePunto(valor, true)}
@@ -1368,6 +1503,7 @@ export function PartidoLivePage() {
             equipo={equipoVisitante}
             titulares={jugadoresTitularesVisitante}
             suplentes={jugadoresSuplentesVisitante}
+            entrenadores={entrenadoresVisitante.filter(e => entrenadoresSeleccionadosVisitante.has(e.id))}
             jugadorSeleccionado={jugadorSeleccionadoVisitante}
             onSeleccionarJugador={setJugadorSeleccionadoVisitante}
             onPunto={(valor) => handlePunto(valor, false)}
@@ -1829,6 +1965,7 @@ interface EquipoPanelProps {
   equipo: Equipo;
   titulares: JugadorEnPartido[];
   suplentes: JugadorEnPartido[];
+  entrenadores: Entrenador[];
   jugadorSeleccionado: JugadorEnPartido | null;
   onSeleccionarJugador: (j: JugadorEnPartido | null) => void;
   onPunto: (valor: 1 | 2 | 3) => void;
@@ -1848,6 +1985,7 @@ function EquipoPanel({
   equipo,
   titulares,
   suplentes,
+  entrenadores,
   jugadorSeleccionado,
   onSeleccionarJugador,
   onPunto,
@@ -2168,6 +2306,30 @@ function EquipoPanel({
           );
         })}
       </div>
+
+      {/* Entrenadores */}
+      {entrenadores.length > 0 && (
+        <>
+          <div className="text-xs sm:text-sm text-gray-400 mb-1 sm:mb-2 mt-2 sm:mt-3">Entrenadores:</div>
+          <div className="space-y-1">
+            {entrenadores.map(entrenador => (
+              <div
+                key={entrenador.id}
+                className="p-2 bg-gray-700/50 rounded-lg border border-gray-600"
+              >
+                <div className="text-xs sm:text-sm font-medium text-white truncate">
+                  👔 {entrenador.nombre} {entrenador.apellido}
+                </div>
+                {entrenador.licencia_nacional && (
+                  <div className="text-[10px] sm:text-xs text-gray-400">
+                    Lic: {entrenador.licencia_nacional}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
