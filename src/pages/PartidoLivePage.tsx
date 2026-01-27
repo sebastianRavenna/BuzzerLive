@@ -126,44 +126,29 @@ export function PartidoLivePage() {
         setJugadoresVisitante(data.jugadoresVisitante);
 
 
-        // === DEBUG: Cargar entrenadores ===
-        console.log('=== DIAGNÓSTICO DE ENTRENADORES ===');
-        console.log('Partido ID:', data.partido.id);
-        console.log('Partido completo:', data.partido);
-        console.log('Equipo Local completo:', data.equipoLocal);
-        console.log('Equipo Visitante completo:', data.equipoVisitante);
+        // === Cargar entrenadores ===
+        // NOTA: En este sistema, equipos representan clubes, por lo que usamos equipo_id directamente
+        console.log('🏀 Cargando entrenadores...');
+        console.log('Equipo Local ID:', data.partido.equipo_local_id);
+        console.log('Equipo Visitante ID:', data.partido.equipo_visitante_id);
 
-        // Cargar entrenadores de ambos equipos usando club_id de los equipos
-        // Intentar primero desde el partido, sino desde el equipo
-        console.log('partido.club_local_id:', data.partido.club_local_id);
-        console.log('equipoLocal.club_id:', data.equipoLocal.club_id);
-
-        const clubLocalId = data.partido.club_local_id || data.equipoLocal.club_id;
-        const clubVisitanteId = data.partido.club_visitante_id || data.equipoVisitante.club_id;
-
-        console.log('clubLocalId final:', clubLocalId);
-        console.log('clubVisitanteId final:', clubVisitanteId);
-
-        if (clubLocalId) {
-          console.log('Llamando a getEntrenadoresByClub con:', clubLocalId);
-          const entrenadoresL = await getEntrenadoresByClub(clubLocalId);
-          console.log('Entrenadores locales obtenidos:', entrenadoresL);
+        try {
+          const entrenadoresL = await getEntrenadoresByClub(data.partido.equipo_local_id);
+          console.log('✅ Entrenadores locales cargados:', entrenadoresL.length);
           setEntrenadoresLocal(entrenadoresL);
-          console.log('Entrenadores locales cargados:', entrenadoresL.length);
-        } else {
-          console.warn('⚠️ No hay club_id para equipo local');
+        } catch (error) {
+          console.error('❌ Error cargando entrenadores locales:', error);
+          setEntrenadoresLocal([]);
         }
 
-        if (clubVisitanteId) {
-          console.log('Llamando a getEntrenadoresByClub con:', clubVisitanteId);
-          const entrenadoresV = await getEntrenadoresByClub(clubVisitanteId);
-          console.log('Entrenadores visitantes obtenidos:', entrenadoresV);
+        try {
+          const entrenadoresV = await getEntrenadoresByClub(data.partido.equipo_visitante_id);
+          console.log('✅ Entrenadores visitantes cargados:', entrenadoresV.length);
           setEntrenadoresVisitante(entrenadoresV);
-          console.log('Entrenadores visitantes cargados:', entrenadoresV.length);
-        } else {
-          console.warn('⚠️ No hay club_id para equipo visitante');
+        } catch (error) {
+          console.error('❌ Error cargando entrenadores visitantes:', error);
+          setEntrenadoresVisitante([]);
         }
-        console.log('=== FIN DIAGNÓSTICO ===');
 
         if (data.partido.estado === 'PROGRAMADO') {
           // Verificar si algún equipo tiene más de 12 jugadores
