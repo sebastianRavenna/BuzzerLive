@@ -97,16 +97,47 @@ export function PublicDashboardPage() {
         const posicionesData = await getTablaPosiciones(selectedTorneo.id);
         setPosiciones(posicionesData);
 
-        // Obtener partidos del torneo
+        // Obtener partidos del torneo desde la tabla partidos
         const { data: partidosData, error: partidosError } = await supabase
-          .from('marcador_partido')
-          .select('*')
+          .from('partidos')
+          .select(`
+            *,
+            equipo_local:equipos!partidos_equipo_local_id_fkey(nombre, nombre_corto, escudo_url),
+            equipo_visitante:equipos!partidos_equipo_visitante_id_fkey(nombre, nombre_corto, escudo_url)
+          `)
           .eq('torneo_id', selectedTorneo.id)
           .order('fecha', { ascending: true });
 
         if (partidosError) throw partidosError;
 
-        setPartidos(partidosData || []);
+        // Transformar a formato compatible con el componente
+        const partidosFormateados = (partidosData || []).map(p => ({
+          partido_id: p.id,
+          estado: p.estado,
+          cuarto_actual: p.cuarto_actual,
+          fecha: p.fecha,
+          hora: p.hora,
+          lugar: p.lugar,
+          local_id: p.equipo_local_id,
+          local_nombre: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.nombre : p.equipo_local?.nombre,
+          local_nombre_corto: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.nombre_corto : p.equipo_local?.nombre_corto,
+          local_escudo: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.escudo_url : p.equipo_local?.escudo_url,
+          puntos_local: p.puntos_local,
+          visitante_id: p.equipo_visitante_id,
+          visitante_nombre: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.nombre : p.equipo_visitante?.nombre,
+          visitante_nombre_corto: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.nombre_corto : p.equipo_visitante?.nombre_corto,
+          visitante_escudo: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.escudo_url : p.equipo_visitante?.escudo_url,
+          puntos_visitante: p.puntos_visitante,
+          torneo_nombre: selectedTorneo.nombre,
+          torneo_categoria: selectedTorneo.categoria || '',
+          faltas_equipo_local: p.faltas_equipo_local || [],
+          faltas_equipo_visitante: p.faltas_equipo_visitante || [],
+          tiempos_muertos_local: p.tiempos_muertos_local || 0,
+          tiempos_muertos_visitante: p.tiempos_muertos_visitante || 0,
+          puntos_por_cuarto: p.puntos_por_cuarto || { local: [], visitante: [] }
+        }));
+
+        setPartidos(partidosFormateados);
       } catch (err) {
         console.error('Error cargando datos del torneo:', err);
       }
