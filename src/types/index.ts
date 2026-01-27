@@ -15,7 +15,7 @@ export type PlanOrganizacion = 'basico' | 'profesional' | 'enterprise';
 // Database types (matching Supabase schema)
 // ============================================
 
-export type EstadoTorneo = 'PLANIFICACION' | 'EN_CURSO' | 'FINALIZADO' | 'CANCELADO';
+export type EstadoTorneo = 'PROGRAMADO' | 'PLANIFICACION' | 'EN_CURSO' | 'FINALIZADO' | 'CANCELADO' | 'SUSPENDIDO';
 export type EstadoPartido = 'PROGRAMADO' | 'EN_CURSO' | 'FINALIZADO' | 'SUSPENDIDO' | 'POSTERGADO';
 export type TipoAccion = 
   | 'PUNTO_1' 
