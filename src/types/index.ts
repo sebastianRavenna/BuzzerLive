@@ -127,7 +127,8 @@ export interface UsuarioClub extends BaseEntity {
 
 // Entrenador
 export interface Entrenador extends BaseEntity {
-  club_id: string;
+  equipo_id: string;
+  organizacion_id?: string;
   nombre: string;
   apellido: string;
   dni?: string;
@@ -425,7 +426,8 @@ export interface CreateClubForm {
 }
 
 export interface CreateEntrenadorForm {
-  club_id: string;
+  equipo_id: string;
+  organizacion_id: string;
   nombre: string;
   apellido: string;
   dni?: string;
