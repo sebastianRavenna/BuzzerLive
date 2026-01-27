@@ -76,10 +76,10 @@ export async function getJugadoresByClub(clubId: string): Promise<Jugador[]> {
       *,
       equipo:equipos(nombre, nombre_corto)
     `)
-    .eq('club_id', clubId)
+    .eq('equipo_id', clubId)
     .eq('activo', true)
     .order('apellido');
-  
+
   if (error) throw error;
   return data || [];
 }
@@ -89,7 +89,7 @@ export async function createJugador(form: CreateJugadorForm, clubId: string, org
     .from('jugadores')
     .insert({
       ...form,
-      club_id: clubId,
+      equipo_id: clubId,
       organizacion_id: organizacionId,
       es_capitan: form.es_capitan || false,
       es_refuerzo: form.es_refuerzo || false,
@@ -97,7 +97,7 @@ export async function createJugador(form: CreateJugadorForm, clubId: string, org
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -184,10 +184,10 @@ export async function getEntrenadoresByClub(clubId: string): Promise<Entrenador[
   const { data, error } = await supabase
     .from('entrenadores')
     .select('*')
-    .eq('club_id', clubId)
+    .eq('equipo_id', clubId)
     .eq('activo', true)
     .order('apellido');
-  
+
   if (error) throw error;
   return data || [];
 }
@@ -297,9 +297,9 @@ export async function getPartidosDelClub(clubId: string, filtros?: {
       equipo_local:equipos!partidos_equipo_local_id_fkey(nombre, nombre_corto, escudo_url),
       equipo_visitante:equipos!partidos_equipo_visitante_id_fkey(nombre, nombre_corto, escudo_url)
     `)
-    .or(`club_local_id.eq.${clubId},club_visitante_id.eq.${clubId}`)
+    .or(`equipo_local_id.eq.${clubId},equipo_visitante_id.eq.${clubId}`)
     .order('fecha', { ascending: false });
-  
+
   if (filtros?.estado) {
     query = query.eq('estado', filtros.estado);
   }
@@ -309,9 +309,9 @@ export async function getPartidosDelClub(clubId: string, filtros?: {
   if (filtros?.hasta) {
     query = query.lte('fecha', filtros.hasta);
   }
-  
+
   const { data, error } = await query;
-  
+
   if (error) throw error;
   return data || [];
 }
@@ -343,21 +343,21 @@ export async function getClubStats(clubId: string) {
     supabase
       .from('jugadores')
       .select('id', { count: 'exact', head: true })
-      .eq('club_id', clubId)
+      .eq('equipo_id', clubId)
       .eq('activo', true),
     supabase
       .from('entrenadores')
       .select('id', { count: 'exact', head: true })
-      .eq('club_id', clubId)
+      .eq('equipo_id', clubId)
       .eq('activo', true),
     supabase
       .from('partidos')
       .select('id, estado', { count: 'exact' })
-      .or(`club_local_id.eq.${clubId},club_visitante_id.eq.${clubId}`),
+      .or(`equipo_local_id.eq.${clubId},equipo_visitante_id.eq.${clubId}`),
   ]);
-  
+
   const partidosData = partidos.data || [];
-  
+
   return {
     jugadores: jugadores.count || 0,
     entrenadores: entrenadores.count || 0,
@@ -375,26 +375,26 @@ export async function getClubStats(clubId: string) {
 export async function getCertificadosPorVencer(clubId: string, diasAnticipacion: number = 30) {
   const fechaLimite = new Date();
   fechaLimite.setDate(fechaLimite.getDate() + diasAnticipacion);
-  
+
   const [jugadores, entrenadores] = await Promise.all([
     supabase
       .from('jugadores')
       .select('id, nombre, apellido, certificado_medico_vencimiento')
-      .eq('club_id', clubId)
+      .eq('equipo_id', clubId)
       .eq('activo', true)
       .not('certificado_medico_vencimiento', 'is', null)
       .lte('certificado_medico_vencimiento', fechaLimite.toISOString().split('T')[0]),
     supabase
       .from('entrenadores')
       .select('id, nombre, apellido, certificado_medico_vencimiento')
-      .eq('club_id', clubId)
+      .eq('equipo_id', clubId)
       .eq('activo', true)
       .not('certificado_medico_vencimiento', 'is', null)
       .lte('certificado_medico_vencimiento', fechaLimite.toISOString().split('T')[0]),
   ]);
-  
+
   const hoy = new Date().toISOString().split('T')[0];
-  
+
   return {
     jugadores: (jugadores.data || []).map(j => ({
       ...j,
