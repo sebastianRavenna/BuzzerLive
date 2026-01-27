@@ -57,29 +57,19 @@ export function PublicDashboardPage() {
         }
 
         setOrg(orgData);
-        console.log('Organización cargada:', orgData.nombre, 'ID:', orgData.id);
 
-        // Debug: Ver TODOS los torneos de esta org (sin filtro de estado)
-        const { data: allTorneosOrg } = await supabase
-          .from('torneos')
-          .select('*')
-          .eq('organizacion_id', orgData.id);
-        console.log('TODOS los torneos de la org (sin filtro):', allTorneosOrg);
-
-        // Obtener torneos activos (EN_CURSO, PLANIFICACION, y PROGRAMADO)
+        // Obtener torneos activos (PROGRAMADO, PLANIFICACION, EN_CURSO)
         const { data: torneosData, error: torneosError } = await supabase
           .from('torneos')
           .select('*')
           .eq('organizacion_id', orgData.id)
-          .in('estado', ['EN_CURSO', 'PLANIFICACION', 'PROGRAMADO'])
+          .in('estado', ['PROGRAMADO', 'PLANIFICACION', 'EN_CURSO'])
           .order('created_at', { ascending: false });
 
         if (torneosError) {
           console.error('Error cargando torneos:', torneosError);
           throw torneosError;
         }
-
-        console.log('Torneos activos encontrados:', torneosData?.length || 0, torneosData);
 
         setTorneos(torneosData || []);
       } catch (err) {
@@ -153,12 +143,37 @@ export function PublicDashboardPage() {
     switch (estado) {
       case 'EN_CURSO':
         return 'bg-green-600';
+      case 'PROGRAMADO':
+        return 'bg-blue-600';
       case 'PLANIFICACION':
         return 'bg-yellow-600';
       case 'FINALIZADO':
         return 'bg-gray-600';
+      case 'SUSPENDIDO':
+        return 'bg-orange-600';
+      case 'CANCELADO':
+        return 'bg-red-600';
       default:
-        return 'bg-gray-600';
+        return 'bg-blue-600';
+    }
+  };
+
+  const getEstadoTexto = (estado: string) => {
+    switch (estado) {
+      case 'EN_CURSO':
+        return 'En Curso';
+      case 'PROGRAMADO':
+        return 'Programado';
+      case 'PLANIFICACION':
+        return 'Planificación';
+      case 'FINALIZADO':
+        return 'Finalizado';
+      case 'SUSPENDIDO':
+        return 'Suspendido';
+      case 'CANCELADO':
+        return 'Cancelado';
+      default:
+        return estado;
     }
   };
 
@@ -226,7 +241,7 @@ export function PublicDashboardPage() {
                       {torneo.nombre}
                     </h3>
                     <span className={`text-xs px-2 py-1 rounded ${getEstadoBadgeColor(torneo.estado)}`}>
-                      {torneo.estado === 'EN_CURSO' ? 'En Curso' : 'Planificación'}
+                      {getEstadoTexto(torneo.estado)}
                     </span>
                   </div>
                   <p className="text-gray-400 text-sm mb-1">{torneo.categoria}</p>
