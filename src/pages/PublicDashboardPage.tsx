@@ -60,10 +60,11 @@ export function PublicDashboardPage() {
         console.log('Organización cargada:', orgData.nombre, 'ID:', orgData.id);
 
         // Obtener torneos activos
+        // Usar .or() para incluir torneos con organizacion_id NULL o igual al de la org
         const { data: torneosData, error: torneosError } = await supabase
           .from('torneos')
           .select('*')
-          .eq('organizacion_id', orgData.id)
+          .or(`organizacion_id.eq.${orgData.id},organizacion_id.is.null`)
           .in('estado', ['EN_CURSO', 'PLANIFICACION'])
           .order('created_at', { ascending: false });
 
@@ -72,14 +73,7 @@ export function PublicDashboardPage() {
           throw torneosError;
         }
 
-        console.log('Torneos encontrados con filtros:', torneosData?.length || 0);
-
-        // Debug: obtener todos los torneos sin filtro de estado
-        const { data: allTorneos } = await supabase
-          .from('torneos')
-          .select('*')
-          .eq('organizacion_id', orgData.id);
-        console.log('Todos los torneos de la org:', allTorneos?.length || 0, allTorneos);
+        console.log('Torneos encontrados:', torneosData?.length || 0, torneosData);
 
         setTorneos(torneosData || []);
       } catch (err) {
