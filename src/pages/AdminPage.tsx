@@ -8,6 +8,7 @@ import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../
 import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, exportarJugadoresEquipo, type JugadorImport, type ImportResult } from '../services/excel.service';
 import { imprimirPlanilla } from '../services/pdf.service';
 import ImageUpload from '../components/common/ImageUpload';
+import type { EstadoTorneo, Club, Jugador, Partido } from '../types';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
@@ -38,7 +39,7 @@ export default function AdminPage() {
   // Modals
   const [showTorneoModal, setShowTorneoModal] = useState(false);
   const [editingTorneo, setEditingTorneo] = useState<Torneo | null>(null);
-  const [torneoForm, setTorneoForm] = useState({ nombre: '', tipo: 'liga' as TorneoTipo, categoria: '', fecha_inicio: '', fecha_fin: '' });
+  const [torneoForm, setTorneoForm] = useState({ nombre: '', tipo: 'liga' as TorneoTipo, categoria: '', fecha_inicio: '', fecha_fin: '', estado: 'PROGRAMADO' as EstadoTorneo });
 
   const [showEquiposModal, setShowEquiposModal] = useState(false);
   const [selectedTorneo, setSelectedTorneo] = useState<Torneo | null>(null);
@@ -118,15 +119,27 @@ export default function AdminPage() {
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
   // TORNEOS
-  const openCreateTorneo = () => { setEditingTorneo(null); setTorneoForm({ nombre: '', tipo: 'liga', categoria: '', fecha_inicio: '', fecha_fin: '' }); setShowTorneoModal(true); };
-  const openEditTorneo = (t: Torneo) => { setEditingTorneo(t); setTorneoForm({ nombre: t.nombre, tipo: t.tipo, categoria: t.categoria || '', fecha_inicio: t.fecha_inicio || '', fecha_fin: t.fecha_fin || '' }); setShowTorneoModal(true); };
+  const openCreateTorneo = () => { setEditingTorneo(null); setTorneoForm({ nombre: '', tipo: 'liga', categoria: '', fecha_inicio: '', fecha_fin: '', estado: 'PROGRAMADO' }); setShowTorneoModal(true); };
+  const openEditTorneo = (t: Torneo) => { setEditingTorneo(t); setTorneoForm({ nombre: t.nombre, tipo: t.tipo, categoria: t.categoria || '', fecha_inicio: t.fecha_inicio || '', fecha_fin: t.fecha_fin || '', estado: t.estado }); setShowTorneoModal(true); };
   const handleSaveTorneo = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const result = editingTorneo ? await updateTorneo(editingTorneo.id, torneoForm) : await createTorneo(user.organizacion_id, torneoForm);
     if (result.error) { setError(result.error); return; }
     setShowTorneoModal(false); loadData();
   };
-  const handleDeleteTorneo = async (t: Torneo) => { if (!confirm(`¿Eliminar "${t.nombre}"?`)) return; const result = await deleteTorneo(t.id); if (!result.success) alert(result.error); else loadData(); };
+  const handleDeleteTorneo = async (t: Torneo) => {
+    if (!confirm(`¿Eliminar "${t.nombre}"?`)) return;
+    const result = await deleteTorneo(t.id);
+    if (!result.success) {
+      const cambiarACancelado = confirm(`${result.error}\n\n¿Desea marcar el torneo como CANCELADO en su lugar?`);
+      if (cambiarACancelado) {
+        await updateTorneo(t.id, { estado: 'CANCELADO' });
+        loadData();
+      }
+    } else {
+      loadData();
+    }
+  };
   const openTorneoEquipos = async (t: Torneo) => { setSelectedTorneo(t); setTorneoEquipos(await getTorneoEquipos(t.id)); setTablaPosiciones(await getTablaPosiciones(t.id)); setShowEquiposModal(true); };
   const handleAddEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await addEquipoToTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };
   const handleRemoveEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await removeEquipoFromTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };
@@ -305,7 +318,14 @@ export default function AdminPage() {
           <button onClick={openCreateTorneo} className="mb-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">+ Torneo</button>
           <div className="grid gap-4">{torneos.map(t => (
             <div key={t.id} className="bg-gray-800 rounded-xl p-4 flex justify-between items-center">
-              <div><h3 className="text-xl font-bold text-white">{t.nombre} <span className={`ml-2 px-2 py-0.5 rounded text-xs ${t.estado === 'en_curso' ? 'bg-green-600' : 'bg-blue-600'} text-white`}>{t.estado}</span></h3><p className="text-gray-400 text-sm">{t.categoria} {t.fecha_inicio && `· ${new Date(t.fecha_inicio).toLocaleDateString()}`}</p></div>
+              <div><h3 className="text-xl font-bold text-white">{t.nombre} <span className={`ml-2 px-2 py-0.5 rounded text-xs text-white ${
+                t.estado === 'EN_CURSO' ? 'bg-green-600' :
+                t.estado === 'FINALIZADO' ? 'bg-gray-600' :
+                t.estado === 'PROGRAMADO' ? 'bg-blue-600' :
+                t.estado === 'PLANIFICACION' ? 'bg-yellow-600' :
+                t.estado === 'SUSPENDIDO' ? 'bg-orange-600' :
+                t.estado === 'CANCELADO' ? 'bg-red-600' : 'bg-blue-600'
+              }`}>{t.estado}</span></h3><p className="text-gray-400 text-sm">{t.categoria} {t.fecha_inicio && `· ${new Date(t.fecha_inicio).toLocaleDateString()}`}</p></div>
               <div className="flex gap-2">
                 <button onClick={() => openTorneoEquipos(t)} className="px-3 py-1.5 bg-blue-600 cursor-pointer text-white rounded text-sm">⚙️ Equipos</button>
                 <button onClick={() => openEditTorneo(t)} className="px-3 py-1.5 bg-gray-600 cursor-pointer text-white rounded text-sm">✏️</button>
@@ -413,6 +433,7 @@ export default function AdminPage() {
           <div className="space-y-4">
             <div><label className="block text-gray-300 text-sm mb-1">Nombre *</label><input type="text" value={torneoForm.nombre} onChange={e => setTorneoForm({...torneoForm, nombre: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Tipo</label><select value={torneoForm.tipo} onChange={e => setTorneoForm({...torneoForm, tipo: e.target.value as TorneoTipo})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white">{TIPOS_TORNEO.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div><div><label className="block text-gray-300 text-sm mb-1">Categoría</label><select value={torneoForm.categoria} onChange={e => setTorneoForm({...torneoForm, categoria: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">-</option>{CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}</select></div></div>
+            <div><label className="block text-gray-300 text-sm mb-1">Estado</label><select value={torneoForm.estado} onChange={e => setTorneoForm({...torneoForm, estado: e.target.value as EstadoTorneo})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="PROGRAMADO">Programado</option><option value="PLANIFICACION">Planificación</option><option value="EN_CURSO">En Curso</option><option value="FINALIZADO">Finalizado</option><option value="SUSPENDIDO">Suspendido</option><option value="CANCELADO">Cancelado</option></select></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Inicio</label><input type="date" value={torneoForm.fecha_inicio} onChange={e => setTorneoForm({...torneoForm, fecha_inicio: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div><div><label className="block text-gray-300 text-sm mb-1">Fin</label><input type="date" value={torneoForm.fecha_fin} onChange={e => setTorneoForm({...torneoForm, fecha_fin: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
