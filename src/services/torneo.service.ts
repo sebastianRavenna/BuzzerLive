@@ -1,11 +1,12 @@
 import { supabase } from './supabase';
+import type { EstadoTorneo } from '../types';
 
 export interface Torneo {
   id: string;
   organizacion_id: string;
   nombre: string;
   tipo: 'liga' | 'copa' | 'liga_copa';
-  estado: 'programado' | 'en_curso' | 'finalizado' | 'suspendido';
+  estado: EstadoTorneo;
   temporada: string;
   fecha_inicio: string | null;
   fecha_fin: string | null;
@@ -115,7 +116,7 @@ export async function createTorneo(
       organizacion_id: organizacionId,
       nombre: input.nombre,
       tipo: input.tipo,
-      estado: 'programado',
+      estado: 'PROGRAMADO',
       temporada: new Date().getFullYear().toString(),
       categoria: input.categoria || null,
       fecha_inicio: input.fecha_inicio || null,
@@ -363,7 +364,7 @@ export async function generarFixture(
   }
 
   // Actualizar estado del torneo
-  await updateTorneo(torneoId, { estado: 'programado' });
+  await updateTorneo(torneoId, { estado: 'PROGRAMADO' });
 
   return { partidos: partidos.length, error: null };
 }
