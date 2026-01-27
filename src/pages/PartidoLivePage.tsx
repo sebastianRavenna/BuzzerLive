@@ -2320,9 +2320,9 @@ function EquipoPanel({
                 <div className="text-xs sm:text-sm font-medium text-white truncate">
                   👔 {entrenador.nombre} {entrenador.apellido}
                 </div>
-                {entrenador.licencia_nacional && (
+                {entrenador.licencia && (
                   <div className="text-[10px] sm:text-xs text-gray-400">
-                    Lic: {entrenador.licencia_nacional}
+                    Lic: {entrenador.licencia}
                   </div>
                 )}
               </div>
