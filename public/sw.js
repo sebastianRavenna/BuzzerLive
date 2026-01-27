@@ -1,4 +1,4 @@
-const CACHE_NAME = 'buzzerlive-v17'; // Incrementar versión en cada deploy
+const CACHE_NAME = 'buzzerlive-v18'; // Incrementar versión en cada deploy
 const urlsToCache = [
   '/',
   '/index.html',
