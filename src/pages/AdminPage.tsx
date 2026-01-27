@@ -147,7 +147,7 @@ export default function AdminPage() {
 
   // CLUBES
   const openCreateClub = () => { setEditingClub(null); setClubForm({ nombre: '', nombre_corto: '', logo_url: '', direccion: '', telefono: '', email: '' }); setShowClubModal(true); };
-  const openEditClub = (c: Club) => { setEditingClub(c); setClubForm({ nombre: c.nombre, nombre_corto: c.nombre_corto || '', logo_url: c.logo_url || '', direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '' }); setShowClubModal(true); };
+  const openEditClub = (c: ClubLocal) => { setEditingClub(c); setClubForm({ nombre: c.nombre, nombre_corto: c.nombre_corto || '', logo_url: c.logo_url || '', direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '' }); setShowClubModal(true); };
   const handleSaveClub = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const data = { nombre: clubForm.nombre, nombre_corto: clubForm.nombre_corto, logo_url: clubForm.logo_url || null, direccion: clubForm.direccion || null, telefono: clubForm.telefono || null, email: clubForm.email || null };
@@ -164,7 +164,7 @@ export default function AdminPage() {
     }
     setShowClubModal(false); loadData();
   };
-  const handleToggleClub = async (c: Club) => { await supabase.from('equipos').update({ activo: !c.activo }).eq('id', c.id); loadData(); };
+  const handleToggleClub = async (c: ClubLocal) => { await supabase.from('equipos').update({ activo: !c.activo }).eq('id', c.id); loadData(); };
   const handleUploadLogo = async (file: File) => {
     if (!editingClub) return { url: null, error: 'Guarda el club primero' };
     const result = await uploadClubLogo(file, editingClub.id);
@@ -174,7 +174,7 @@ export default function AdminPage() {
 
   // JUGADORES
   const openCreateJugador = () => { setEditingJugador(null); setJugadorForm({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', certificado_medico_url: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' }); setShowJugadorModal(true); };
-  const openEditJugador = (j: Jugador) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', certificado_medico_url: j.certificado_medico_url || '', foto_url: j.foto_url || '', es_refuerzo: j.es_refuerzo || false, cuartos_limite: j.cuartos_limite ? String(j.cuartos_limite) : '' }); setShowJugadorModal(true); };
+  const openEditJugador = (j: JugadorLocal) => { setEditingJugador(j); setJugadorForm({ nombre: j.nombre, apellido: j.apellido, numero_camiseta: String(j.numero_camiseta), dni: j.dni || '', fecha_nacimiento: j.fecha_nacimiento || '', equipo_id: j.equipo_id, certificado_medico_vencimiento: j.certificado_medico_vencimiento || '', certificado_medico_url: j.certificado_medico_url || '', foto_url: j.foto_url || '', es_refuerzo: j.es_refuerzo || false, cuartos_limite: j.cuartos_limite ? String(j.cuartos_limite) : '' }); setShowJugadorModal(true); };
   const handleSaveJugador = async () => {
     if (!user?.organizacion_id) return; setError(null);
     const data = { nombre: jugadorForm.nombre, apellido: jugadorForm.apellido, numero_camiseta: parseInt(jugadorForm.numero_camiseta), dni: jugadorForm.dni || null, fecha_nacimiento: jugadorForm.fecha_nacimiento || null, equipo_id: jugadorForm.equipo_id, certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null, foto_url: jugadorForm.foto_url || null, es_refuerzo: jugadorForm.es_refuerzo, cuartos_limite: jugadorForm.cuartos_limite ? parseInt(jugadorForm.cuartos_limite) : null };
@@ -184,7 +184,7 @@ export default function AdminPage() {
     if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowJugadorModal(false); loadData();
   };
-  const handleToggleJugador = async (j: Jugador) => { await supabase.from('jugadores').update({ activo: !j.activo }).eq('id', j.id); loadData(); };
+  const handleToggleJugador = async (j: JugadorLocal) => { await supabase.from('jugadores').update({ activo: !j.activo }).eq('id', j.id); loadData(); };
   const handleUploadFoto = async (file: File) => {
     if (!editingJugador) return { url: null, error: 'Guarda el jugador primero' };
     const result = await uploadJugadorFoto(file, editingJugador.id);
@@ -230,7 +230,7 @@ export default function AdminPage() {
     if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowPartidoModal(false); loadData();
   };
-  const handleDeletePartido = async (p: Partido) => { if (p.estado !== 'PROGRAMADO' || !confirm('¿Eliminar?')) return; await supabase.from('partidos').delete().eq('id', p.id); loadData(); };
+  const handleDeletePartido = async (p: PartidoLocal) => { if (p.estado !== 'PROGRAMADO' || !confirm('¿Eliminar?')) return; await supabase.from('partidos').delete().eq('id', p.id); loadData(); };
 
   // ASIGNACIONES
   const openAsignar = async (p: PartidoSinAsignar) => { setPartidoAsignar(p); setAsignacionesPartido(await getAsignacionesPartido(p.id)); setShowAsignarModal(true); };
@@ -247,7 +247,7 @@ export default function AdminPage() {
     if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
     setShowUserModal(false); loadData(); alert('Usuario creado');
   };
-  const handleToggleUser = async (u: Usuario) => { await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id); loadData(); };
+  const handleToggleUser = async (u: UsuarioLocal) => { await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id); loadData(); };
 
   if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
 
