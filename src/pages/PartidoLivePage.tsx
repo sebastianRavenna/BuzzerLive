@@ -125,14 +125,21 @@ export function PartidoLivePage() {
         setJugadoresLocal(data.jugadoresLocal);
         setJugadoresVisitante(data.jugadoresVisitante);
 
-        // Cargar entrenadores de ambos equipos
-        if (data.equipoLocal.club_id) {
-          const entrenadoresL = await getEntrenadoresByClub(data.equipoLocal.club_id);
+
+        // Cargar entrenadores de ambos equipos usando club_id del partido
+        if (data.partido.club_local_id) {
+          const entrenadoresL = await getEntrenadoresByClub(data.partido.club_local_id);
           setEntrenadoresLocal(entrenadoresL);
+          console.log('Entrenadores locales cargados:', entrenadoresL.length);
+        } else {
+          console.warn('No hay club_local_id en el partido');
         }
-        if (data.equipoVisitante.club_id) {
-          const entrenadoresV = await getEntrenadoresByClub(data.equipoVisitante.club_id);
+        if (data.partido.club_visitante_id) {
+          const entrenadoresV = await getEntrenadoresByClub(data.partido.club_visitante_id);
           setEntrenadoresVisitante(entrenadoresV);
+          console.log('Entrenadores visitantes cargados:', entrenadoresV.length);
+        } else {
+          console.warn('No hay club_visitante_id en el partido');
         }
 
         if (data.partido.estado === 'PROGRAMADO') {
