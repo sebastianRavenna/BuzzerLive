@@ -8,15 +8,15 @@ import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../
 import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, exportarJugadoresEquipo, type JugadorImport, type ImportResult } from '../services/excel.service';
 import { imprimirPlanilla } from '../services/pdf.service';
 import ImageUpload from '../components/common/ImageUpload';
-import type { EstadoTorneo, Club, Jugador, Partido } from '../types';
+import type { EstadoTorneo } from '../types';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
 
-interface Club { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; direccion: string | null; telefono: string | null; email: string | null; }
-interface Jugador { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
-interface Partido { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
-interface Usuario { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
+interface ClubLocal { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; direccion: string | null; telefono: string | null; email: string | null; }
+interface JugadorLocal { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
+interface PartidoLocal { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
+interface UsuarioLocal { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -26,10 +26,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   const [torneos, setTorneos] = useState<Torneo[]>([]);
-  const [clubes, setClubes] = useState<Club[]>([]);
-  const [jugadores, setJugadores] = useState<Jugador[]>([]);
-  const [partidos, setPartidos] = useState<Partido[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [clubes, setClubes] = useState<ClubLocal[]>([]);
+  const [jugadores, setJugadores] = useState<JugadorLocal[]>([]);
+  const [partidos, setPartidos] = useState<PartidoLocal[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioLocal[]>([]);
   const [partidosSinAsignar, setPartidosSinAsignar] = useState<PartidoSinAsignar[]>([]);
   const [usuariosDisponibles, setUsuariosDisponibles] = useState<any[]>([]);
 
@@ -47,11 +47,11 @@ export default function AdminPage() {
   const [tablaPosiciones, setTablaPosiciones] = useState<any[]>([]);
 
   const [showClubModal, setShowClubModal] = useState(false);
-  const [editingClub, setEditingClub] = useState<Club | null>(null);
+  const [editingClub, setEditingClub] = useState<ClubLocal | null>(null);
   const [clubForm, setClubForm] = useState({ nombre: '', nombre_corto: '', logo_url: '', direccion: '', telefono: '', email: '' });
 
   const [showJugadorModal, setShowJugadorModal] = useState(false);
-  const [editingJugador, setEditingJugador] = useState<Jugador | null>(null);
+  const [editingJugador, setEditingJugador] = useState<JugadorLocal | null>(null);
   const [jugadorForm, setJugadorForm] = useState({ nombre: '', apellido: '', numero_camiseta: '', dni: '', fecha_nacimiento: '', equipo_id: '', certificado_medico_vencimiento: '', certificado_medico_url: '', foto_url: '', es_refuerzo: false, cuartos_limite: '' });
 
   const [showPartidoModal, setShowPartidoModal] = useState(false);
