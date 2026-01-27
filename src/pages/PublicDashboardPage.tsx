@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { getTablaPosiciones } from '../services/torneo.service';
-import type { Organizacion, Torneo, TablaPosicion, MarcadorPartido } from '../types';
+import type { Organizacion, Torneo, MarcadorPartido } from '../types';
+
+// Tipo para posiciones (coincide con lo que retorna getTablaPosiciones)
+interface PosicionEquipo {
+  equipo_id: string;
+  nombre: string;
+  nombre_corto: string;
+  logo_url: string | null;
+  pj: number;
+  pg: number;
+  pe: number;
+  pp: number;
+  pf: number;
+  pc: number;
+  dif: number;
+  pts: number;
+}
 
 export function PublicDashboardPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
@@ -11,7 +27,7 @@ export function PublicDashboardPage() {
   const [org, setOrg] = useState<Organizacion | null>(null);
   const [torneos, setTorneos] = useState<Torneo[]>([]);
   const [selectedTorneo, setSelectedTorneo] = useState<Torneo | null>(null);
-  const [posiciones, setPosiciones] = useState<TablaPosicion[]>([]);
+  const [posiciones, setPosiciones] = useState<PosicionEquipo[]>([]);
   const [partidos, setPartidos] = useState<MarcadorPartido[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,18 +265,18 @@ export function PublicDashboardPage() {
                           }`}
                         >
                           <td className="text-white text-sm py-3 px-2 font-medium">
-                            {pos.posicion}
+                            {index + 1}
                           </td>
                           <td className="text-white text-sm py-3 px-2">
                             <div className="flex items-center gap-2">
-                              {pos.escudo_url && (
+                              {pos.logo_url && (
                                 <img
-                                  src={pos.escudo_url}
-                                  alt={pos.equipo_nombre}
+                                  src={pos.logo_url}
+                                  alt={pos.nombre_corto || pos.nombre}
                                   className="w-6 h-6 object-contain"
                                 />
                               )}
-                              <span className="truncate">{pos.equipo_nombre}</span>
+                              <span className="truncate">{pos.nombre_corto || pos.nombre}</span>
                             </div>
                           </td>
                           <td className="text-gray-300 text-sm py-3 px-1 text-center">{pos.pj}</td>
