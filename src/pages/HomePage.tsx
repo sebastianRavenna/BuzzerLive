@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
-import type { MarcadorPartido } from '../types';
+import type { MarcadorPartido, Organizacion } from '../types';
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -10,6 +10,7 @@ export function HomePage() {
   const user = getCurrentUser();
   const [partidosEnVivo, setPartidosEnVivo] = useState<MarcadorPartido[]>([]);
   const [ultimosResultados, setUltimosResultados] = useState<MarcadorPartido[]>([]);
+  const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,8 +53,21 @@ export function HomePage() {
 
         if (!isMounted) return;
 
+        const { data: orgs, error: errorOrgs } = await supabase
+          .from('organizaciones')
+          .select('*')
+          .eq('activa', true)
+          .order('nombre', { ascending: true });
+
+        if (errorOrgs) {
+          console.error('Error cargando organizaciones:', errorOrgs);
+        }
+
+        if (!isMounted) return;
+
         setPartidosEnVivo(enVivo || []);
         setUltimosResultados(finalizados || []);
+        setOrganizaciones(orgs || []);
       } catch (error) {
         console.error('Error en fetchData:', error);
       } finally {
@@ -121,7 +135,50 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
         
         {user && <p className="mt-2 text-sm text-gray-500">Conectado como {user.email}</p>}
       </section>
-      
+
+      {/* Organizaciones */}
+      {configured && organizaciones.length > 0 && (
+        <section className="bg-white rounded-xl shadow-md p-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">🏆 Organizaciones</h2>
+            <p className="text-gray-600">Accedé a los torneos y estadísticas de cada organización</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {organizaciones.map((org) => (
+              <Link
+                key={org.id}
+                to={`/${org.slug}/public`}
+                className="block p-6 rounded-xl border-2 border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-blue-300 transition-all hover:shadow-md"
+              >
+                <div className="flex flex-col items-center text-center gap-3">
+                  {org.logo_url ? (
+                    <img
+                      src={org.logo_url}
+                      alt={org.nombre}
+                      className="w-16 h-16 object-contain"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center text-2xl">
+                      🏀
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">{org.nombre}</h3>
+                    {org.descripcion && (
+                      <p className="text-sm text-gray-600 line-clamp-2">{org.descripcion}</p>
+                    )}
+                  </div>
+                  <div className="text-blue-600 text-sm font-medium">
+                    Ver Dashboard →
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Quick Actions */}
       <section className="grid md:grid-cols-3 gap-6">
         <QuickActionCard icon="📅" title="Partidos" description="Ver todos los partidos" to="/partidos" color="blue" />

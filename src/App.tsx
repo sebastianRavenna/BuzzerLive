@@ -6,6 +6,7 @@ import { PosicionesPage } from './pages/PosicionesPage';
 import { PartidosPage } from './pages/PartidosPage';
 import { PartidoLivePage } from './pages/PartidoLivePage';
 import { MarcadorPublicoPage } from './pages/MarcadorPublicoPage';
+import { PublicDashboardPage } from './pages/PublicDashboardPage';
 import { InstallPWA } from './components/common/InstallPWA';
 import { UpdatePrompt } from './components/common/UpdatePrompt';
 import LoginPage from './pages/LoginPage';
@@ -66,7 +67,10 @@ function App() {
         <Route path="/:orgSlug/partido/:id/live" element={<PartidoLivePage />} />
         <Route path="/:orgSlug/partido/:id" element={<MarcadorPublicoPage />} />
         <Route path="/:orgSlug/partidos" element={<PartidosPage />} />
-        
+
+        {/* Dashboard público por organización */}
+        <Route path="/:orgSlug/public" element={<PublicDashboardPage />} />
+
         {/* Rutas públicas legacy (sin org) */}
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
