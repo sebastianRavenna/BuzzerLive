@@ -127,7 +127,19 @@ export default function AdminPage() {
     if (result.error) { setError(result.error); return; }
     setShowTorneoModal(false); loadData();
   };
-  const handleDeleteTorneo = async (t: Torneo) => { if (!confirm(`¿Eliminar "${t.nombre}"?`)) return; const result = await deleteTorneo(t.id); if (!result.success) alert(result.error); else loadData(); };
+  const handleDeleteTorneo = async (t: Torneo) => {
+    if (!confirm(`¿Eliminar "${t.nombre}"?`)) return;
+    const result = await deleteTorneo(t.id);
+    if (!result.success) {
+      const cambiarACancelado = confirm(`${result.error}\n\n¿Desea marcar el torneo como CANCELADO en su lugar?`);
+      if (cambiarACancelado) {
+        await updateTorneo(t.id, { estado: 'CANCELADO' });
+        loadData();
+      }
+    } else {
+      loadData();
+    }
+  };
   const openTorneoEquipos = async (t: Torneo) => { setSelectedTorneo(t); setTorneoEquipos(await getTorneoEquipos(t.id)); setTablaPosiciones(await getTablaPosiciones(t.id)); setShowEquiposModal(true); };
   const handleAddEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await addEquipoToTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };
   const handleRemoveEquipo = async (equipoId: string) => { if (!selectedTorneo) return; await removeEquipoFromTorneo(selectedTorneo.id, equipoId); setTorneoEquipos(await getTorneoEquipos(selectedTorneo.id)); };
