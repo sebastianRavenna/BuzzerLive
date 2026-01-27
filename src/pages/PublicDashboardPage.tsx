@@ -57,6 +57,7 @@ export function PublicDashboardPage() {
         }
 
         setOrg(orgData);
+        console.log('Organización cargada:', orgData.nombre, 'ID:', orgData.id);
 
         // Obtener torneos activos
         const { data: torneosData, error: torneosError } = await supabase
@@ -66,7 +67,19 @@ export function PublicDashboardPage() {
           .in('estado', ['EN_CURSO', 'PLANIFICACION'])
           .order('created_at', { ascending: false });
 
-        if (torneosError) throw torneosError;
+        if (torneosError) {
+          console.error('Error cargando torneos:', torneosError);
+          throw torneosError;
+        }
+
+        console.log('Torneos encontrados con filtros:', torneosData?.length || 0);
+
+        // Debug: obtener todos los torneos sin filtro de estado
+        const { data: allTorneos } = await supabase
+          .from('torneos')
+          .select('*')
+          .eq('organizacion_id', orgData.id);
+        console.log('Todos los torneos de la org:', allTorneos?.length || 0, allTorneos);
 
         setTorneos(torneosData || []);
       } catch (err) {
