@@ -266,7 +266,7 @@ function PartidoMiniCard({ partido }: { partido: MarcadorPartido }) {
   );
 }
 
-interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
+/*interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
 
 function QuickActionCard({ icon, title, description, to, color }: QuickActionCardProps) {
   const colorClasses = {
@@ -282,4 +282,4 @@ function QuickActionCard({ icon, title, description, to, color }: QuickActionCar
       <p className="text-sm text-gray-600">{description}</p>
     </Link>
   );
-}
+}*/
