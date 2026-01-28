@@ -116,7 +116,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
       
       {/* Hero */}
       <section className="text-center py-12">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">🏀 BuzzerLive</h1>
+        <img src="logo_horizontal.png" alt="Logo BuzzerLive" className='w-150 mx-auto'/>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-6">
           Sistema de gestión de partidos de básquet con seguimiento en tiempo real
         </p>
@@ -180,12 +180,12 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
       )}
 
       {/* Quick Actions */}
-      <section className="grid md:grid-cols-3 gap-6">
+      {/*<section className="grid md:grid-cols-3 gap-6">
         <QuickActionCard icon="📅" title="Partidos" description="Ver todos los partidos" to="/partidos" color="blue" />
         <QuickActionCard icon="📊" title="Ver Posiciones" description="Tabla de posiciones actualizada" to="/posiciones" color="green" />
         <QuickActionCard icon="🔴" title="Partidos en Vivo" description="Seguí los partidos en curso" to="/partidos?estado=en_curso" color="red" />
-      </section>
-      
+      </section>*/}
+
       {/* Live Games */}
       <section className="bg-white rounded-xl shadow-md p-4">
         <div className="flex items-center justify-between mb-4">
