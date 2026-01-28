@@ -390,8 +390,50 @@ export async function getPartidosTorneo(torneoId: string) {
   return data || [];
 }
 
+// Sincronizar equipos del torneo desde partidos
+// Si hay partidos pero no hay equipos en torneo_equipos, los agrega automáticamente
+async function syncEquiposFromPartidos(torneoId: string) {
+  // Obtener todos los partidos del torneo
+  const partidos = await getPartidosTorneo(torneoId);
+  if (partidos.length === 0) return;
+
+  // Obtener equipos únicos de los partidos
+  const equipoIds = new Set<string>();
+  partidos.forEach(p => {
+    equipoIds.add(p.equipo_local_id);
+    equipoIds.add(p.equipo_visitante_id);
+  });
+
+  // Verificar cuáles equipos ya están en torneo_equipos
+  const { data: existentes } = await supabase
+    .from('torneo_equipos')
+    .select('equipo_id')
+    .eq('torneo_id', torneoId);
+
+  const existentesIds = new Set(existentes?.map(e => e.equipo_id) || []);
+
+  // Agregar los equipos que faltan
+  const equiposNuevos = Array.from(equipoIds).filter(id => !existentesIds.has(id));
+
+  if (equiposNuevos.length > 0) {
+    console.log(`🔄 Sincronizando ${equiposNuevos.length} equipos al torneo ${torneoId}`);
+    await supabase
+      .from('torneo_equipos')
+      .insert(
+        equiposNuevos.map(equipo_id => ({
+          torneo_id: torneoId,
+          equipo_id: equipo_id,
+          grupo: null
+        }))
+      );
+  }
+}
+
 // Obtener tabla de posiciones
 export async function getTablaPosiciones(torneoId: string) {
+  // Sincronizar equipos desde partidos si es necesario
+  await syncEquiposFromPartidos(torneoId);
+
   const partidos = await getPartidosTorneo(torneoId);
   const equipos = await getTorneoEquipos(torneoId);
   const torneo = await getTorneo(torneoId);
