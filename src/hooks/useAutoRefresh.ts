@@ -21,3 +21,4 @@ export function useAutoRefresh(callback: () => void) {
     };
   }, [callback]);
 }
+
