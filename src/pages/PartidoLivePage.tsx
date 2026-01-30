@@ -298,19 +298,28 @@ export function PartidoLivePage() {
 
       console.log('👀 PartidoLivePage: App vuelve a ser visible');
 
-      // Verificar estado del WebSocket de Supabase Realtime
+      // 1. Verificar estado del WebSocket de Supabase Realtime
       const connectionState = supabase.realtime.connectionState() as string;
       console.log(`🔌 Estado de Realtime: ${connectionState}`);
 
-      // Solo reconectar y recargar si el WebSocket estaba cerrado
+      // 2. Reconectar WebSocket si está cerrado
       if (connectionState !== 'open') {
         console.log('🔄 Reconectando Supabase Realtime...');
         supabase.realtime.connect();
-
-        // Esperar un momento a que se establezca la conexión
         await new Promise(resolve => setTimeout(resolve, 500));
+      }
 
-        // Recargar datos solo después de reconectar
+      // 3. "Despertar" el cliente HTTP de Supabase con una query simple
+      console.log('🔄 Verificando cliente HTTP de Supabase...');
+      try {
+        await supabase.auth.getSession();
+        console.log('✅ Cliente HTTP verificado y funcionando');
+      } catch (err) {
+        console.error('❌ Error verificando cliente HTTP:', err);
+      }
+
+      // 4. Recargar datos solo si el WebSocket estaba cerrado
+      if (connectionState !== 'open') {
         console.log('🔄 Recargando datos del partido...');
         try {
           const data = await getPartidoCompleto(id);
@@ -323,8 +332,6 @@ export function PartidoLivePage() {
         } catch (err) {
           console.error('❌ Error recargando datos:', err);
         }
-      } else {
-        console.log('✅ WebSocket ya estaba conectado, no es necesario recargar');
       }
     };
 
