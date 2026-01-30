@@ -309,16 +309,37 @@ export function PartidoLivePage() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // 3. "Despertar" el cliente HTTP de Supabase con una query simple
-      console.log('🔄 Verificando cliente HTTP de Supabase...');
+      // 3. "Despertar" el cliente HTTP con una query real a la BD
+      console.log('🔄 Despertando cliente HTTP con query a BD...');
       try {
-        await supabase.auth.getSession();
-        console.log('✅ Cliente HTTP verificado y funcionando');
+        // Query con timeout de 5 segundos
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Timeout en query de ping')), 5000);
+        });
+
+        const queryPromise = supabase
+          .from('partidos')
+          .select('id, estado')
+          .eq('id', id)
+          .single();
+
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        const { error: errorPing } = result as { data: unknown; error: unknown };
+
+        if (errorPing) {
+          console.error('❌ Error en ping a BD:', errorPing);
+          console.warn('⚠️ Cliente HTTP no responde. Recargando página en 2 segundos...');
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          console.log('✅ Cliente HTTP despertado correctamente');
+        }
       } catch (err) {
-        console.error('❌ Error verificando cliente HTTP:', err);
+        console.error('❌ Error despertando cliente HTTP:', err);
+        console.warn('⚠️ Cliente HTTP no responde. Recargando página en 2 segundos...');
+        setTimeout(() => window.location.reload(), 2000);
       }
 
-      // 4. Recargar datos solo si el WebSocket estaba cerrado
+      // 4. Recargar datos completos solo si el WebSocket estaba cerrado
       if (connectionState !== 'open') {
         console.log('🔄 Recargando datos del partido...');
         try {
