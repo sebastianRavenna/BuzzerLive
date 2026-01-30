@@ -151,18 +151,41 @@ export async function registrarAccion(
   if (esDescuento) {
     return await descontarAccion(partidoId, equipoId, jugadorId, tipo, cuarto);
   }
-  
+
   const timestampLocal = new Date().toISOString();
-  
-  const { data, error } = await supabase.rpc('registrar_accion', {
-    p_partido_id: partidoId,
-    p_equipo_id: equipoId,
-    p_jugador_id: jugadorId,
-    p_tipo: tipo,
-    p_cuarto: cuarto,
-    p_timestamp_local: timestampLocal,
-    p_cliente_id: getClienteId(),
-  });
+
+  console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
+
+  // Ejecutar la RPC con timeout de 10 segundos
+  let data, error;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        console.log('⏰ Timeout: registrar_accion tardó más de 10 segundos');
+        reject(new Error('Timeout: La operación tardó demasiado'));
+      }, 10000);
+    });
+
+    const rpcPromise = supabase.rpc('registrar_accion', {
+      p_partido_id: partidoId,
+      p_equipo_id: equipoId,
+      p_jugador_id: jugadorId,
+      p_tipo: tipo,
+      p_cuarto: cuarto,
+      p_timestamp_local: timestampLocal,
+      p_cliente_id: getClienteId(),
+    });
+
+    console.log('⏳ Esperando respuesta de registrar_accion...');
+    const result = await Promise.race([rpcPromise, timeoutPromise]);
+    console.log('✅ registrar_accion completado');
+    data = (result as { data: unknown }).data;
+    error = (result as { error: unknown }).error;
+  } catch (err) {
+    console.error('❌ Error en registrar_accion:', err);
+    // Si timeout u otro error, lanzar
+    throw err;
+  }
 
   if (error) throw error;
   
