@@ -100,9 +100,23 @@ export default function AdminPage() {
     setClubes(clubesRes.data || []);
     setJugadores(jugadoresRes.data || []);
     setPartidos(partidosRes.data || []);
-    setUsuarios(usuariosRes.data || []);
+
+    // Transformar usuarios: Supabase devuelve joins como arrays, necesitamos objeto
+    const usuariosTransformados = (usuariosRes.data || []).map((u: { club?: unknown[] }) => ({
+      ...u,
+      club: Array.isArray(u.club) && u.club.length > 0 ? u.club[0] : undefined
+    })) as UsuarioLocal[];
+    setUsuarios(usuariosTransformados);
+
     setPartidosSinAsignar(sinAsignar);
-    setUsuariosDisponibles(disponibles);
+
+    // Transformar usuarios disponibles también
+    const disponiblesTransformados = disponibles.map((u: { club?: unknown[] }) => ({
+      ...u,
+      club: Array.isArray(u.club) && u.club.length > 0 ? u.club[0] : undefined
+    })) as UsuarioLocal[];
+    setUsuariosDisponibles(disponiblesTransformados);
+
     setLoading(false);
   }, [user?.organizacion_id]);
 
