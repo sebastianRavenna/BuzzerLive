@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido, Organizacion } from '../types';
 
 export function HomePage() {
@@ -13,6 +14,51 @@ export function HomePage() {
   const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchData = async () => {
+    if (!configured) return;
+
+    try {
+      const { data: enVivo, error: errorEnVivo } = await supabase
+        .from('marcador_partido')
+        .select('*')
+        .eq('estado', 'EN_CURSO')
+        .limit(5);
+
+      if (errorEnVivo) {
+        console.error('Error cargando partidos en vivo:', errorEnVivo);
+      }
+
+      const { data: finalizados, error: errorFinalizados } = await supabase
+        .from('marcador_partido')
+        .select('*')
+        .eq('estado', 'FINALIZADO')
+        .order('fecha', { ascending: false })
+        .limit(5);
+
+      if (errorFinalizados) {
+        console.error('Error cargando resultados:', errorFinalizados);
+      }
+
+      const { data: orgs, error: errorOrgs } = await supabase
+        .from('organizaciones')
+        .select('*')
+        .eq('activa', true)
+        .order('nombre', { ascending: true });
+
+      if (errorOrgs) {
+        console.error('Error cargando organizaciones:', errorOrgs);
+      }
+
+      setPartidosEnVivo(enVivo || []);
+      setUltimosResultados(finalizados || []);
+      setOrganizaciones(orgs || []);
+    } catch (error) {
+      console.error('Error en fetchData:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!configured) {
       setLoading(false);
@@ -21,68 +67,28 @@ export function HomePage() {
 
     let isMounted = true;
 
-    async function fetchData() {
-      try {
-        // Pequeño delay para asegurar que Supabase esté completamente inicializado
-        await new Promise(resolve => setTimeout(resolve, 100));
+    const init = async () => {
+      // Pequeño delay para asegurar que Supabase esté completamente inicializado
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        if (!isMounted) return;
-
-        const { data: enVivo, error: errorEnVivo } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'EN_CURSO')
-          .limit(5);
-
-        if (errorEnVivo) {
-          console.error('Error cargando partidos en vivo:', errorEnVivo);
-        }
-
-        if (!isMounted) return;
-
-        const { data: finalizados, error: errorFinalizados } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'FINALIZADO')
-          .order('fecha', { ascending: false })
-          .limit(5);
-
-        if (errorFinalizados) {
-          console.error('Error cargando resultados:', errorFinalizados);
-        }
-
-        if (!isMounted) return;
-
-        const { data: orgs, error: errorOrgs } = await supabase
-          .from('organizaciones')
-          .select('*')
-          .eq('activa', true)
-          .order('nombre', { ascending: true });
-
-        if (errorOrgs) {
-          console.error('Error cargando organizaciones:', errorOrgs);
-        }
-
-        if (!isMounted) return;
-
-        setPartidosEnVivo(enVivo || []);
-        setUltimosResultados(finalizados || []);
-        setOrganizaciones(orgs || []);
-      } catch (error) {
-        console.error('Error en fetchData:', error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+      if (isMounted) {
+        fetchData();
       }
-    }
+    };
 
-    fetchData();
+    init();
 
     return () => {
       isMounted = false;
     };
   }, [configured]);
+
+  // Auto-refresh cuando vuelve de minimizar o recupera conexión
+  useAutoRefresh(() => {
+    if (configured) {
+      fetchData();
+    }
+  });
 
   const handleLoginClick = () => {
     if (user) {
@@ -116,7 +122,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
       
       {/* Hero */}
       <section className="text-center py-12">
-        <img src="logo_horizontal.png" alt="Logo BuzzerLive" className='w-150 mx-auto'/>
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">🏀 BuzzerLive</h1>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-6">
           Sistema de gestión de partidos de básquet con seguimiento en tiempo real
         </p>
@@ -180,12 +186,12 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
       )}
 
       {/* Quick Actions */}
-      {/*<section className="grid md:grid-cols-3 gap-6">
+      <section className="grid md:grid-cols-3 gap-6">
         <QuickActionCard icon="📅" title="Partidos" description="Ver todos los partidos" to="/partidos" color="blue" />
         <QuickActionCard icon="📊" title="Ver Posiciones" description="Tabla de posiciones actualizada" to="/posiciones" color="green" />
         <QuickActionCard icon="🔴" title="Partidos en Vivo" description="Seguí los partidos en curso" to="/partidos?estado=en_curso" color="red" />
-      </section>*/}
-
+      </section>
+      
       {/* Live Games */}
       <section className="bg-white rounded-xl shadow-md p-4">
         <div className="flex items-center justify-between mb-4">
@@ -266,7 +272,7 @@ function PartidoMiniCard({ partido }: { partido: MarcadorPartido }) {
   );
 }
 
-/*interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
+interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
 
 function QuickActionCard({ icon, title, description, to, color }: QuickActionCardProps) {
   const colorClasses = {
@@ -282,4 +288,4 @@ function QuickActionCard({ icon, title, description, to, color }: QuickActionCar
       <p className="text-sm text-gray-600">{description}</p>
     </Link>
   );
-}*/
+}

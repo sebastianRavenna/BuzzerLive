@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { TablaPosicion, Torneo } from '../types';
 
 export function PosicionesPage() {
@@ -8,57 +9,65 @@ export function PosicionesPage() {
   const [posiciones, setPosiciones] = useState<TablaPosicion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const configured = isSupabaseConfigured();
-  
+
   // Cargar torneos
-  useEffect(() => {
+  const fetchTorneos = async () => {
     if (!configured) {
       setLoading(false);
       return;
     }
-    
-    async function fetchTorneos() {
-      const { data, error } = await supabase
-        .from('torneos')
-        .select('*')
-        .eq('estado', 'EN_CURSO')
-        .order('nombre');
-      
-      if (error) {
-        setError(error.message);
-      } else if (data) {
-        setTorneos(data);
-        if (data.length > 0) {
-          setTorneoSeleccionado(data[0].id);
-        }
+
+    const { data, error } = await supabase
+      .from('torneos')
+      .select('*')
+      .eq('estado', 'EN_CURSO')
+      .order('nombre');
+
+    if (error) {
+      setError(error.message);
+    } else if (data) {
+      setTorneos(data);
+      if (data.length > 0) {
+        setTorneoSeleccionado(data[0].id);
       }
-      setLoading(false);
     }
-    
+    setLoading(false);
+  };
+
+  // Cargar posiciones cuando cambia el torneo
+  const fetchPosiciones = async () => {
+    if (!torneoSeleccionado || !configured) return;
+
+    const { data, error } = await supabase
+      .from('tabla_posiciones')
+      .select('*')
+      .eq('torneo_id', torneoSeleccionado)
+      .order('posicion');
+
+    if (error) {
+      setError(error.message);
+    } else if (data) {
+      setPosiciones(data);
+    }
+  };
+
+  useEffect(() => {
     fetchTorneos();
   }, [configured]);
-  
-  // Cargar posiciones cuando cambia el torneo
+
   useEffect(() => {
-    if (!torneoSeleccionado || !configured) return;
-    
-    async function fetchPosiciones() {
-      const { data, error } = await supabase
-        .from('tabla_posiciones')
-        .select('*')
-        .eq('torneo_id', torneoSeleccionado)
-        .order('posicion');
-      
-      if (error) {
-        setError(error.message);
-      } else if (data) {
-        setPosiciones(data);
-      }
-    }
-    
     fetchPosiciones();
   }, [torneoSeleccionado, configured]);
+
+  // Auto-refresh cuando vuelve de minimizar o recupera conexión
+  useAutoRefresh(() => {
+    if (configured) {
+      fetchTorneos();
+      fetchPosiciones();
+    }
+  });
   
   if (!configured) {
     return (

@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
-import { 
-  getOrganizaciones, 
-  createOrganizacion, 
-  updateOrganizacion, 
+import {
+  getOrganizaciones,
+  createOrganizacion,
+  updateOrganizacion,
   deleteOrganizacion,
   getOrganizacionStats,
   getUsuariosOrganizacion,
   PLANES,
-  type Organizacion 
+  type Organizacion
 } from '../services/organizacion.service';
 import { supabase } from '../services/supabase';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 type Tab = 'organizaciones' | 'stats';
 
@@ -94,6 +95,13 @@ export default function SuperAdminPage() {
     setOrganizaciones(orgs);
     setLoading(false);
   };
+
+  // Auto-refresh cuando vuelve de minimizar o recupera conexión
+  useAutoRefresh(() => {
+    if (user?.rol === 'superadmin') {
+      loadOrganizaciones();
+    }
+  });
 
   const handleLogout = async () => {
     await logout();

@@ -7,6 +7,7 @@ import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, qu
 import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../services/storage.service';
 import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, exportarJugadoresEquipo, type JugadorImport, type ImportResult } from '../services/excel.service';
 import { imprimirPlanilla } from '../services/pdf.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import ImageUpload from '../components/common/ImageUpload';
 import type { EstadoTorneo } from '../types';
 
@@ -115,6 +116,13 @@ export default function AdminPage() {
     setTorneos(torneosData); setClubes(clubesRes.data || []); setJugadores(jugadoresRes.data || []); setPartidos(partidosRes.data || []); setUsuarios(usuariosRes.data || []); setPartidosSinAsignar(sinAsignar); setUsuariosDisponibles(disponibles);
     setLoading(false);
   };
+
+  // Auto-refresh cuando vuelve de minimizar o recupera conexión
+  useAutoRefresh(() => {
+    if (user?.organizacion_id) {
+      loadData();
+    }
+  });
 
   const handleLogout = async () => { await logout(); navigate('/login'); };
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
 
@@ -120,7 +121,7 @@ export default function ClubPage() {
   const loadData = async () => {
     if (!user?.club_id || !user?.organizacion_id) return;
     setLoading(true);
-    
+
     const [clubRes, jugadoresRes, entrenadoresRes, partidosRes] = await Promise.all([
       supabase.from('equipos').select('*').eq('id', user.club_id).single(),
       supabase.from('jugadores').select('*').eq('equipo_id', user.club_id).order('numero_camiseta'),
@@ -129,13 +130,20 @@ export default function ClubPage() {
         .or(`equipo_local_id.eq.${user.club_id},equipo_visitante_id.eq.${user.club_id}`)
         .order('fecha', { ascending: false }).limit(20),
     ]);
-    
+
     setClub(clubRes.data);
     setJugadores(jugadoresRes.data || []);
     setEntrenadores(entrenadoresRes.data || []);
     setPartidos(partidosRes.data || []);
     setLoading(false);
   };
+
+  // Auto-refresh cuando vuelve de minimizar o recupera conexión
+  useAutoRefresh(() => {
+    if (user?.club_id && user?.organizacion_id) {
+      loadData();
+    }
+  });
 
   const handleLogout = async () => {
     await logout();
