@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { supabase } from './services/supabase'; // Importamos la instancia directa
 import { Layout } from './components/common/Layout';
 import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
@@ -54,6 +55,45 @@ function App() {
       }
     };
   }, []);
+
+  // === 2. Lógica Global de "Wake Up" (El Watchdog) ===
+  // Esto arregla el problema de "se cuelga al volver" en TODAS las páginas
+  useEffect(() => {
+    const handleWakeUp = async () => {
+      if (document.visibilityState === 'visible') {
+        // A. Verificar si el socket de Realtime está desconectado y reconectar
+        const state = supabase.realtime.connectionState()as string;
+
+        console.log(`👀 App despierta. Estado Socket: ${state}`);
+        
+        if (state === 'closed' || state === 'disconnected') {
+          console.log("🔌 Socket desconectado. Reconectando...");
+          supabase.realtime.connect();
+        }
+
+        // B. Verificar si la sesión sigue siendo válida (esto refresca el token si hace falta)
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error || !session) {
+          // Si la sesión murió mientras estaba minimizado
+          if (user) {
+            console.warn("⚠️ Sesión caducada en background. Redirigiendo a login...");
+            // En vez de reload, redirigir a login es más limpio
+            window.location.href = '/login';
+          }
+        }
+      }
+    };
+
+    // Escuchar cambios de visibilidad (Tab minimizado -> Tab activo)
+    document.addEventListener('visibilitychange', handleWakeUp);
+    window.addEventListener('focus', handleWakeUp);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeUp);
+      window.removeEventListener('focus', handleWakeUp);
+    };
+  }, [user]); // Dependemos de 'user' para saber si vale la pena chequear sesión
 
   if (loading) {
     return (
