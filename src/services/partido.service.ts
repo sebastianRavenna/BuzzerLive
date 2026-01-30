@@ -9,57 +9,89 @@ import type {
 
 // Obtener datos completos de un partido
 export async function getPartidoCompleto(partidoId: string) {
+  console.log('📥 getPartidoCompleto() INICIO - Partido ID:', partidoId);
+  console.log('⏱️ Timestamp:', new Date().toISOString());
+
   // Obtener partido con equipos
+  console.log('🔍 Query 1/7: Obteniendo partido...');
+  const startPartido = performance.now();
   const { data: partido, error: errorPartido } = await supabase
     .from('partidos')
     .select('*')
     .eq('id', partidoId)
     .single();
+  const endPartido = performance.now();
+  console.log(`✅ Query partido completada en ${(endPartido - startPartido).toFixed(2)}ms`);
 
-  if (errorPartido) throw errorPartido;
-  if (!partido) throw new Error('Partido no encontrado');
+  if (errorPartido) {
+    console.error('❌ Error obteniendo partido:', errorPartido);
+    throw errorPartido;
+  }
+  if (!partido) {
+    console.error('❌ Partido no encontrado');
+    throw new Error('Partido no encontrado');
+  }
+  console.log('📦 Partido cargado:', partido.id, '-', partido.estado);
 
   // Obtener equipos
+  console.log('🔍 Query 2/7: Obteniendo equipo local...');
+  const startEqLocal = performance.now();
   const { data: equipoLocal } = await supabase
     .from('equipos')
     .select('*')
     .eq('id', partido.equipo_local_id)
     .single();
+  console.log(`✅ Equipo local en ${(performance.now() - startEqLocal).toFixed(2)}ms`);
 
+  console.log('🔍 Query 3/7: Obteniendo equipo visitante...');
+  const startEqVis = performance.now();
   const { data: equipoVisitante } = await supabase
     .from('equipos')
     .select('*')
     .eq('id', partido.equipo_visitante_id)
     .single();
+  console.log(`✅ Equipo visitante en ${(performance.now() - startEqVis).toFixed(2)}ms`);
 
   // Obtener jugadores de ambos equipos
+  console.log('🔍 Query 4/7: Obteniendo jugadores locales...');
+  const startJugLocal = performance.now();
   const { data: jugadoresLocal } = await supabase
     .from('jugadores')
     .select('*')
     .eq('equipo_id', partido.equipo_local_id)
     .eq('activo', true)
     .order('numero_camiseta');
+  console.log(`✅ Jugadores locales (${jugadoresLocal?.length || 0}) en ${(performance.now() - startJugLocal).toFixed(2)}ms`);
 
+  console.log('🔍 Query 5/7: Obteniendo jugadores visitantes...');
+  const startJugVis = performance.now();
   const { data: jugadoresVisitante } = await supabase
     .from('jugadores')
     .select('*')
     .eq('equipo_id', partido.equipo_visitante_id)
     .eq('activo', true)
     .order('numero_camiseta');
+  console.log(`✅ Jugadores visitantes (${jugadoresVisitante?.length || 0}) en ${(performance.now() - startJugVis).toFixed(2)}ms`);
 
   // Obtener participaciones (estadísticas de este partido)
+  console.log('🔍 Query 6/7: Obteniendo participaciones...');
+  const startPartic = performance.now();
   const { data: participaciones } = await supabase
     .from('participaciones_partido')
     .select('*')
     .eq('partido_id', partidoId);
+  console.log(`✅ Participaciones (${participaciones?.length || 0}) en ${(performance.now() - startPartic).toFixed(2)}ms`);
 
   // Obtener acciones de faltas para contar todas las faltas
+  console.log('🔍 Query 7/7: Obteniendo acciones de faltas...');
+  const startAcciones = performance.now();
   const { data: accionesFaltas } = await supabase
     .from('acciones')
     .select('jugador_id, tipo')
     .eq('partido_id', partidoId)
     .eq('anulada', false)
     .in('tipo', ['FALTA_PERSONAL', 'FALTA_TECNICA', 'FALTA_ANTIDEPORTIVA', 'FALTA_DESCALIFICANTE']);
+  console.log(`✅ Acciones faltas (${accionesFaltas?.length || 0}) en ${(performance.now() - startAcciones).toFixed(2)}ms`);
 
   // Mapear jugadores con sus estadísticas del partido
   const mapJugadorConStats = (jugador: Jugador): JugadorEnPartido => {
@@ -93,6 +125,14 @@ export async function getPartidoCompleto(partidoId: string) {
       es_titular: participacion?.es_titular || false,
     };
   };
+
+  console.log('✅ getPartidoCompleto() COMPLETADO');
+  console.log('📊 Resumen:');
+  console.log('  - Partido:', partido.id);
+  console.log('  - Jugadores local:', jugadoresLocal?.length || 0);
+  console.log('  - Jugadores visitante:', jugadoresVisitante?.length || 0);
+  console.log('  - Participaciones:', participaciones?.length || 0);
+  console.log('  - Acciones:', accionesFaltas?.length || 0);
 
   return {
     partido: partido as Partido,

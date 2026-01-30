@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { supabase, testSupabaseConnection, reinitializeSupabaseClient } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -296,7 +296,10 @@ export function PartidoLivePage() {
       // Solo actuar cuando la página vuelve a ser visible
       if (document.visibilityState !== 'visible') return;
 
+      console.log('═══════════════════════════════════════════════');
       console.log('👀 PartidoLivePage: App vuelve a ser visible');
+      console.log('⏱️ Timestamp:', new Date().toISOString());
+      console.log('═══════════════════════════════════════════════');
 
       // 1. Verificar estado del WebSocket de Supabase Realtime
       const connectionState = supabase.realtime.connectionState() as string;
@@ -307,41 +310,36 @@ export function PartidoLivePage() {
         console.log('🔄 Reconectando Supabase Realtime...');
         supabase.realtime.connect();
         await new Promise(resolve => setTimeout(resolve, 500));
+        const newState = supabase.realtime.connectionState() as string;
+        console.log(`🔌 Nuevo estado Realtime: ${newState}`);
       }
 
-      // 3. "Despertar" el cliente HTTP con una query real a la BD
-      console.log('🔄 Despertando cliente HTTP con query a BD...');
-      try {
-        // Query con timeout de 5 segundos
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout en query de ping')), 5000);
-        });
+      // 3. Probar conexión HTTP con timeout
+      console.log('🧪 Probando conexión HTTP...');
+      const isConnectionOk = await testSupabaseConnection(5000);
 
-        const queryPromise = supabase
-          .from('partidos')
-          .select('id, estado')
-          .eq('id', id)
-          .single();
+      // 4. Si la conexión HTTP falló, REINICIALIZAR cliente completo
+      if (!isConnectionOk) {
+        console.warn('⚠️ Conexión HTTP FALLO - Reinicializando cliente Supabase...');
+        try {
+          reinitializeSupabaseClient();
+          console.log('✅ Cliente reinicializado - Probando nuevamente...');
 
-        const result = await Promise.race([queryPromise, timeoutPromise]);
-        const { error: errorPing } = result as { data: unknown; error: unknown };
-
-        if (errorPing) {
-          console.error('❌ Error en ping a BD:', errorPing);
-          console.warn('⚠️ Cliente HTTP no responde. Recargando página en 2 segundos...');
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          console.log('✅ Cliente HTTP despertado correctamente');
+          // Probar conexión después de reinicializar
+          const isConnectionOkAfterReinit = await testSupabaseConnection(5000);
+          if (isConnectionOkAfterReinit) {
+            console.log('✅ Conexión HTTP OK después de reinicializar');
+          } else {
+            console.error('❌ Conexión HTTP sigue fallando después de reinicializar');
+          }
+        } catch (err) {
+          console.error('❌ Error reinicializando cliente:', err);
         }
-      } catch (err) {
-        console.error('❌ Error despertando cliente HTTP:', err);
-        console.warn('⚠️ Cliente HTTP no responde. Recargando página en 2 segundos...');
-        setTimeout(() => window.location.reload(), 2000);
       }
 
-      // 4. Recargar datos completos solo si el WebSocket estaba cerrado
+      // 5. Recargar datos completos solo si el WebSocket estaba cerrado
       if (connectionState !== 'open') {
-        console.log('🔄 Recargando datos del partido...');
+        console.log('🔄 Recargando datos del partido (WebSocket estaba cerrado)...');
         try {
           const data = await getPartidoCompleto(id);
           setPartido(data.partido);
@@ -354,6 +352,10 @@ export function PartidoLivePage() {
           console.error('❌ Error recargando datos:', err);
         }
       }
+
+      console.log('═══════════════════════════════════════════════');
+      console.log('✅ handleVisibilityChange COMPLETADO');
+      console.log('═══════════════════════════════════════════════');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
