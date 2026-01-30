@@ -196,14 +196,14 @@ export async function registrarAccion(
 
   console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
 
-  // Ejecutar la RPC con timeout de 10 segundos
+  // Ejecutar la RPC con timeout de 15 segundos (más tolerante post-reconexión)
   let data, error;
   try {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
-        console.log('⏰ Timeout: registrar_accion tardó más de 10 segundos');
+        console.log('⏰ Timeout: registrar_accion tardó más de 15 segundos');
         reject(new Error('Timeout: La operación tardó demasiado'));
-      }, 10000);
+      }, 15000);
     });
 
     const rpcPromise = supabase.rpc('registrar_accion', {
