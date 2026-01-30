@@ -80,6 +80,7 @@ function App() {
              }
           } else {
              console.log("✅ Sesión validada correctamente.");
+             window.dispatchEvent(new Event('buzzer:wakeup'));
           }
         } catch (err: any) {
           // C. Capturar el AbortError para que no rompa la app

@@ -1,88 +1,86 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Agregamos useCallback
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
+import { useAutoRefresh } from '../hooks/useAutoRefresh'; // 1. Importamos el hook
 import type { MarcadorPartido, Organizacion } from '../types';
 
 export function HomePage() {
   const navigate = useNavigate();
   const configured = isSupabaseConfigured();
   const user = getCurrentUser();
+  
   const [partidosEnVivo, setPartidosEnVivo] = useState<MarcadorPartido[]>([]);
   const [ultimosResultados, setUltimosResultados] = useState<MarcadorPartido[]>([]);
   const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // 2. Definimos la función de carga fuera del useEffect para poder reutilizarla
+  // Usamos useCallback para que sea estable y no cause renderizados innecesarios
+  const fetchData = useCallback(async (isRefresh = false) => {
     if (!configured) {
       setLoading(false);
       return;
     }
 
-    let isMounted = true;
+    try {
+      // Solo mostramos loading si NO es un refresco automático (carga inicial)
+      // Esto evita que la pantalla parpadee "Cargando..." cuando volves a la pestaña
+      if (!isRefresh) setLoading(true);
 
-    async function fetchData() {
-      try {
-        // Pequeño delay para asegurar que Supabase esté completamente inicializado
-        await new Promise(resolve => setTimeout(resolve, 100));
+      // Pequeño delay inicial (solo si es carga inicial)
+      if (!isRefresh) await new Promise(resolve => setTimeout(resolve, 100));
 
-        if (!isMounted) return;
+      // A. Cargar En Vivo
+      const { data: enVivo, error: errorEnVivo } = await supabase
+        .from('marcador_partido')
+        .select('*')
+        .eq('estado', 'EN_CURSO')
+        .limit(5);
 
-        const { data: enVivo, error: errorEnVivo } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'EN_CURSO')
-          .limit(5);
+      if (errorEnVivo) console.error('Error cargando partidos en vivo:', errorEnVivo);
 
-        if (errorEnVivo) {
-          console.error('Error cargando partidos en vivo:', errorEnVivo);
-        }
+      // B. Cargar Finalizados
+      const { data: finalizados, error: errorFinalizados } = await supabase
+        .from('marcador_partido')
+        .select('*')
+        .eq('estado', 'FINALIZADO')
+        .order('fecha', { ascending: false })
+        .limit(5);
 
-        if (!isMounted) return;
+      if (errorFinalizados) console.error('Error cargando resultados:', errorFinalizados);
 
-        const { data: finalizados, error: errorFinalizados } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'FINALIZADO')
-          .order('fecha', { ascending: false })
-          .limit(5);
+      // C. Cargar Organizaciones
+      const { data: orgs, error: errorOrgs } = await supabase
+        .from('organizaciones')
+        .select('*')
+        .eq('activa', true)
+        .order('nombre', { ascending: true });
 
-        if (errorFinalizados) {
-          console.error('Error cargando resultados:', errorFinalizados);
-        }
+      if (errorOrgs) console.error('Error cargando organizaciones:', errorOrgs);
 
-        if (!isMounted) return;
+      // Actualizar estados
+      setPartidosEnVivo(enVivo || []);
+      setUltimosResultados(finalizados || []);
+      setOrganizaciones(orgs || []);
 
-        const { data: orgs, error: errorOrgs } = await supabase
-          .from('organizaciones')
-          .select('*')
-          .eq('activa', true)
-          .order('nombre', { ascending: true });
-
-        if (errorOrgs) {
-          console.error('Error cargando organizaciones:', errorOrgs);
-        }
-
-        if (!isMounted) return;
-
-        setPartidosEnVivo(enVivo || []);
-        setUltimosResultados(finalizados || []);
-        setOrganizaciones(orgs || []);
-      } catch (error) {
-        console.error('Error en fetchData:', error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+    } catch (error) {
+      console.error('Error en fetchData:', error);
+    } finally {
+      setLoading(false);
     }
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
   }, [configured]);
+
+  // 3. Carga Inicial (al montar el componente)
+  useEffect(() => {
+    fetchData(false); // false = carga inicial (muestra spinner)
+  }, [fetchData]);
+
+  // 4. Conectar el "Despertador"
+  useAutoRefresh(() => {
+    console.log("🏠 HomePage despertando: Actualizando datos...");
+    fetchData(true); // true = es refresco (silencioso, sin spinner)
+  });
 
   const handleLoginClick = () => {
     if (user) {
@@ -179,13 +177,6 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
         </section>
       )}
 
-      {/* Quick Actions */}
-      {/*<section className="grid md:grid-cols-3 gap-6">
-        <QuickActionCard icon="📅" title="Partidos" description="Ver todos los partidos" to="/partidos" color="blue" />
-        <QuickActionCard icon="📊" title="Ver Posiciones" description="Tabla de posiciones actualizada" to="/posiciones" color="green" />
-        <QuickActionCard icon="🔴" title="Partidos en Vivo" description="Seguí los partidos en curso" to="/partidos?estado=en_curso" color="red" />
-      </section>*/}
-
       {/* Live Games */}
       <section className="bg-white rounded-xl shadow-md p-4">
         <div className="flex items-center justify-between mb-4">
@@ -265,21 +256,3 @@ function PartidoMiniCard({ partido }: { partido: MarcadorPartido }) {
     </Link>
   );
 }
-
-/*interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
-
-function QuickActionCard({ icon, title, description, to, color }: QuickActionCardProps) {
-  const colorClasses = {
-    blue: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-    green: 'bg-green-50 hover:bg-green-100 border-green-200',
-    red: 'bg-red-50 hover:bg-red-100 border-red-200',
-  };
-  
-  return (
-    <Link to={to} className={`block p-6 rounded-xl border-2 transition-all hover:shadow-md ${colorClasses[color]}`}>
-      <div className="text-4xl mb-3">{icon}</div>
-      <h3 className="text-lg font-bold text-gray-900 mb-1">{title}</h3>
-      <p className="text-sm text-gray-600">{description}</p>
-    </Link>
-  );
-}*/
