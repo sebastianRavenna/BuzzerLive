@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
@@ -101,24 +101,7 @@ export default function ClubPage() {
     return unsubscribe;
   }, []);
 
-  // Cargar datos cuando usuario esté listo
-  useEffect(() => {
-    if (!user) {
-      setLoading(true);
-      return;
-    }
-    if (user.rol !== 'club') {
-      navigate('/login');
-      return;
-    }
-    if (!user.club_id) {
-      navigate('/login');
-      return;
-    }
-    loadData();
-  }, [user, navigate]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user?.club_id || !user?.organizacion_id) return;
     setLoading(true);
 
@@ -136,7 +119,24 @@ export default function ClubPage() {
     setEntrenadores(entrenadoresRes.data || []);
     setPartidos(partidosRes.data || []);
     setLoading(false);
-  };
+  }, [user?.club_id, user?.organizacion_id]);
+
+  // Cargar datos cuando usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'club') {
+      navigate('/login');
+      return;
+    }
+    if (!user.club_id) {
+      navigate('/login');
+      return;
+    }
+    loadData();
+  }, [user, navigate, loadData]);
 
   // Auto-refresh cuando vuelve de minimizar o recupera conexión
   useAutoRefresh(() => {

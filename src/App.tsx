@@ -108,15 +108,16 @@ function App() {
             console.log("🚀 Disparando evento buzzer:wakeup");
             window.dispatchEvent(new Event('buzzer:wakeup'));
           }
-        } catch (err: any) {
-          if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        } catch (err: unknown) {
+          const error = err as Error;
+          if (error.name === 'AbortError' || error.message?.includes('aborted')) {
             console.log("🛑 Petición cancelada por el navegador. Reintentando en 500ms...");
 
             // Reintentar después de un delay
             setTimeout(async () => {
               try {
-                const { data, error } = await supabase.auth.getSession();
-                if (!error && data.session) {
+                const { data, error: sessionError } = await supabase.auth.getSession();
+                if (!sessionError && data.session) {
                   console.log("✅ Sesión validada en reintento.");
                   console.log("🚀 Disparando evento buzzer:wakeup");
                   window.dispatchEvent(new Event('buzzer:wakeup'));

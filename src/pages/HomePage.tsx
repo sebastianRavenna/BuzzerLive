@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
@@ -14,7 +14,7 @@ export function HomePage() {
   const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!configured) return;
 
     try {
@@ -64,7 +64,7 @@ export function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [configured]);
 
   useEffect(() => {
     if (!configured) {
@@ -88,7 +88,7 @@ export function HomePage() {
     return () => {
       isMounted = false;
     };
-  }, [configured]);
+  }, [configured, fetchData]);
 
   // Auto-refresh cuando vuelve de minimizar o recupera conexión
   useAutoRefresh(() => {
