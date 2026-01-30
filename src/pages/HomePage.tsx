@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido, Organizacion } from '../types';
@@ -18,40 +18,47 @@ export function HomePage() {
     if (!configured) return;
 
     try {
-      const { data: enVivo, error: errorEnVivo } = await supabase
-        .from('marcador_partido')
-        .select('*')
-        .eq('estado', 'EN_CURSO')
-        .limit(5);
+      // Usar withRetry para cada query para manejar AbortError
+      const enVivoResult = await withRetry(async () => {
+        return await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'EN_CURSO')
+          .limit(5);
+      });
 
-      if (errorEnVivo) {
-        console.error('Error cargando partidos en vivo:', errorEnVivo);
+      if (enVivoResult.error) {
+        console.error('Error cargando partidos en vivo:', enVivoResult.error);
       }
 
-      const { data: finalizados, error: errorFinalizados } = await supabase
-        .from('marcador_partido')
-        .select('*')
-        .eq('estado', 'FINALIZADO')
-        .order('fecha', { ascending: false })
-        .limit(5);
+      const finalizadosResult = await withRetry(async () => {
+        return await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'FINALIZADO')
+          .order('fecha', { ascending: false })
+          .limit(5);
+      });
 
-      if (errorFinalizados) {
-        console.error('Error cargando resultados:', errorFinalizados);
+      if (finalizadosResult.error) {
+        console.error('Error cargando resultados:', finalizadosResult.error);
       }
 
-      const { data: orgs, error: errorOrgs } = await supabase
-        .from('organizaciones')
-        .select('*')
-        .eq('activa', true)
-        .order('nombre', { ascending: true });
+      const orgsResult = await withRetry(async () => {
+        return await supabase
+          .from('organizaciones')
+          .select('*')
+          .eq('activa', true)
+          .order('nombre', { ascending: true });
+      });
 
-      if (errorOrgs) {
-        console.error('Error cargando organizaciones:', errorOrgs);
+      if (orgsResult.error) {
+        console.error('Error cargando organizaciones:', orgsResult.error);
       }
 
-      setPartidosEnVivo(enVivo || []);
-      setUltimosResultados(finalizados || []);
-      setOrganizaciones(orgs || []);
+      setPartidosEnVivo(enVivoResult.data || []);
+      setUltimosResultados(finalizadosResult.data || []);
+      setOrganizaciones(orgsResult.data || []);
     } catch (error) {
       console.error('Error en fetchData:', error);
     } finally {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { TablaPosicion, Torneo } from '../types';
 
@@ -19,37 +19,52 @@ export function PosicionesPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('torneos')
-      .select('*')
-      .eq('estado', 'EN_CURSO')
-      .order('nombre');
+    try {
+      const result = await withRetry(async () => {
+        return await supabase
+          .from('torneos')
+          .select('*')
+          .eq('estado', 'EN_CURSO')
+          .order('nombre');
+      });
 
-    if (error) {
-      setError(error.message);
-    } else if (data) {
-      setTorneos(data);
-      if (data.length > 0) {
-        setTorneoSeleccionado(data[0].id);
+      if (result.error) {
+        setError(result.error.message);
+      } else if (result.data) {
+        setTorneos(result.data);
+        if (result.data.length > 0) {
+          setTorneoSeleccionado(result.data[0].id);
+        }
       }
+    } catch (error: any) {
+      console.error('Error en fetchTorneos:', error);
+      setError(error.message || 'Error al cargar torneos');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Cargar posiciones cuando cambia el torneo
   const fetchPosiciones = async () => {
     if (!torneoSeleccionado || !configured) return;
 
-    const { data, error } = await supabase
-      .from('tabla_posiciones')
-      .select('*')
-      .eq('torneo_id', torneoSeleccionado)
-      .order('posicion');
+    try {
+      const result = await withRetry(async () => {
+        return await supabase
+          .from('tabla_posiciones')
+          .select('*')
+          .eq('torneo_id', torneoSeleccionado)
+          .order('posicion');
+      });
 
-    if (error) {
-      setError(error.message);
-    } else if (data) {
-      setPosiciones(data);
+      if (result.error) {
+        setError(result.error.message);
+      } else if (result.data) {
+        setPosiciones(result.data);
+      }
+    } catch (error: any) {
+      console.error('Error en fetchPosiciones:', error);
+      setError(error.message || 'Error al cargar posiciones');
     }
   };
 

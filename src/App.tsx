@@ -63,32 +63,68 @@ function App() {
       if (document.visibilityState === 'visible') {
         console.log("👀 App despierta. Verificando estado...");
 
-        // A. Verificar Socket
-        const state = supabase.realtime.connectionState() as string; // 'open', 'closed', etc.
+        // A. Verificar y Reconectar Socket (con espera hasta que esté abierto)
+        const state = supabase.realtime.connectionState() as string;
         if (state !== 'open') {
           console.log(`🔌 Socket no está abierto (${state}). Reconectando...`);
           supabase.realtime.connect();
+
+          // 🔑 CLAVE: Esperar a que el socket esté realmente abierto
+          let attempts = 0;
+          const maxAttempts = 20; // 2 segundos máximo (20 * 100ms)
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const currentState = supabase.realtime.connectionState() as string;
+            if (currentState === 'open') {
+              console.log("✅ Socket reconectado exitosamente");
+              break;
+            }
+            attempts++;
+          }
+
+          if (attempts >= maxAttempts) {
+            console.warn("⚠️ Socket no se pudo reconectar después de 2 segundos");
+          }
         }
 
         // B. Verificar sesión BLINDADO contra AbortError
         try {
+          // Pequeño delay adicional para que el navegador esté listo
+          await new Promise(resolve => setTimeout(resolve, 200));
+
           const { data, error } = await supabase.auth.getSession();
 
           if (error || !data.session) {
             console.warn("⚠️ Sesión inválida al despertar.");
             if (user) {
-              // Forzamos logout si había un usuario y perdió la sesión
               window.location.href = '/login';
             }
           } else {
             console.log("✅ Sesión validada correctamente.");
+
+            // 🔑 CLAVE: Otro delay antes de disparar el evento para asegurar estabilidad
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            console.log("🚀 Disparando evento buzzer:wakeup");
             window.dispatchEvent(new Event('buzzer:wakeup'));
           }
         } catch (err: any) {
-          // C. Capturar el AbortError para que no rompa la app
           if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-            console.log("🛑 Petición cancelada por el navegador (normal al despertar). Ignorando.");
-            // No hacemos nada, es seguro ignorarlo.
+            console.log("🛑 Petición cancelada por el navegador. Reintentando en 500ms...");
+
+            // Reintentar después de un delay
+            setTimeout(async () => {
+              try {
+                const { data, error } = await supabase.auth.getSession();
+                if (!error && data.session) {
+                  console.log("✅ Sesión validada en reintento.");
+                  console.log("🚀 Disparando evento buzzer:wakeup");
+                  window.dispatchEvent(new Event('buzzer:wakeup'));
+                }
+              } catch (retryErr) {
+                console.error("❌ Error en reintento:", retryErr);
+              }
+            }, 500);
           } else {
             console.error("❌ Error inesperado al verificar sesión:", err);
           }
@@ -96,7 +132,6 @@ function App() {
       }
     };
 
-    // Escuchar cambios de visibilidad (Tab minimizado -> Tab activo)
     document.addEventListener('visibilitychange', handleWakeUp);
     window.addEventListener('focus', handleWakeUp);
 
@@ -104,7 +139,7 @@ function App() {
       document.removeEventListener('visibilitychange', handleWakeUp);
       window.removeEventListener('focus', handleWakeUp);
     };
-  }, [user]); // Dependemos de 'user' para saber si vale la pena chequear sesión
+  }, [user]);
 
   if (loading) {
     return (

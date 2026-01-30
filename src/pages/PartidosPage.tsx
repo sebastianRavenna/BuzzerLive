@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { reanudarPartido } from '../services/partido.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido } from '../types';
@@ -40,57 +40,66 @@ export function PartidosPage() {
       return;
     }
 
-    let query = supabase
-      .from('marcador_partido')
-      .select('*');
+    try {
+      // Usar withRetry para manejar AbortError automáticamente
+      const result = await withRetry(async () => {
+        let query = supabase
+          .from('marcador_partido')
+          .select('*');
 
-    if (filtro === 'en_curso') {
-      query = query.eq('estado', 'EN_CURSO');
-    } else if (filtro === 'programados') {
-      query = query.eq('estado', 'PROGRAMADO');
-    } else if (filtro === 'finalizados') {
-      query = query.eq('estado', 'FINALIZADO');
-    }
-
-    const { data, error } = await query.limit(50);
-
-    if (error) {
-      setError(error.message);
-    } else if (data) {
-      // Ordenar partidos: EN_CURSO primero, luego SUSPENDIDOS/PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
-      const ordenados = [...data].sort((a, b) => {
-        // Prioridad por estado: SUSPENDIDO se trata como PROGRAMADO
-        const prioridad: Record<string, number> = {
-          'EN_CURSO': 0,
-          'SUSPENDIDO': 1, // Junto con programados para que se vean
-          'PROGRAMADO': 1,
-          'FINALIZADO': 2,
-          'POSTERGADO': 3
-        };
-
-        const prioridadA = prioridad[a.estado] ?? 5;
-        const prioridadB = prioridad[b.estado] ?? 5;
-
-        if (prioridadA !== prioridadB) {
-          return prioridadA - prioridadB;
+        if (filtro === 'en_curso') {
+          query = query.eq('estado', 'EN_CURSO');
+        } else if (filtro === 'programados') {
+          query = query.eq('estado', 'PROGRAMADO');
+        } else if (filtro === 'finalizados') {
+          query = query.eq('estado', 'FINALIZADO');
         }
 
-        // Dentro del mismo estado, ordenar por fecha
-        const fechaA = new Date(a.fecha).getTime();
-        const fechaB = new Date(b.fecha).getTime();
-
-        if (a.estado === 'PROGRAMADO' || a.estado === 'SUSPENDIDO') {
-          // Programados y suspendidos: más próximo primero (fecha ascendente)
-          return fechaA - fechaB;
-        } else {
-          // Finalizados y en curso: más reciente primero (fecha descendente)
-          return fechaB - fechaA;
-        }
+        return query.limit(50);
       });
 
-      setPartidos(ordenados);
+      if (result.error) {
+        setError(result.error.message);
+      } else if (result.data) {
+        // Ordenar partidos: EN_CURSO primero, luego SUSPENDIDOS/PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
+        const ordenados = [...result.data].sort((a, b) => {
+          // Prioridad por estado: SUSPENDIDO se trata como PROGRAMADO
+          const prioridad: Record<string, number> = {
+            'EN_CURSO': 0,
+            'SUSPENDIDO': 1, // Junto con programados para que se vean
+            'PROGRAMADO': 1,
+            'FINALIZADO': 2,
+            'POSTERGADO': 3
+          };
+
+          const prioridadA = prioridad[a.estado] ?? 5;
+          const prioridadB = prioridad[b.estado] ?? 5;
+
+          if (prioridadA !== prioridadB) {
+            return prioridadA - prioridadB;
+          }
+
+          // Dentro del mismo estado, ordenar por fecha
+          const fechaA = new Date(a.fecha).getTime();
+          const fechaB = new Date(b.fecha).getTime();
+
+          if (a.estado === 'PROGRAMADO' || a.estado === 'SUSPENDIDO') {
+            // Programados y suspendidos: más próximo primero (fecha ascendente)
+            return fechaA - fechaB;
+          } else {
+            // Finalizados y en curso: más reciente primero (fecha descendente)
+            return fechaB - fechaA;
+          }
+        });
+
+        setPartidos(ordenados);
+      }
+    } catch (error: any) {
+      console.error('Error en fetchPartidos:', error);
+      setError(error.message || 'Error al cargar partidos');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
