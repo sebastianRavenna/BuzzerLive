@@ -288,6 +288,51 @@ export function PartidoLivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🔌 Reconectar Supabase Realtime cuando la app vuelve de estar minimizada
+  useEffect(() => {
+    if (!id) return;
+
+    const handleVisibilityChange = async () => {
+      // Solo actuar cuando la página vuelve a ser visible
+      if (document.visibilityState !== 'visible') return;
+
+      console.log('👀 PartidoLivePage: App vuelve a ser visible');
+
+      // Verificar estado del WebSocket de Supabase Realtime
+      const connectionState = supabase.realtime.connectionState() as string;
+      console.log(`🔌 Estado de Realtime: ${connectionState}`);
+
+      // Si no está conectado, reconectar
+      if (connectionState !== 'open') {
+        console.log('🔄 Reconectando Supabase Realtime...');
+        supabase.realtime.connect();
+
+        // Esperar un momento a que se establezca la conexión
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Recargar datos del partido
+      console.log('🔄 Recargando datos del partido...');
+      try {
+        const data = await getPartidoCompleto(id);
+        setPartido(data.partido);
+        setEquipoLocal(data.equipoLocal);
+        setEquipoVisitante(data.equipoVisitante);
+        setJugadoresLocal(data.jugadoresLocal);
+        setJugadoresVisitante(data.jugadoresVisitante);
+        console.log('✅ Datos recargados exitosamente');
+      } catch (err) {
+        console.error('❌ Error recargando datos:', err);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [id]);
+
   // Sincronizar cola offline
   const handleSyncOffline = async () => {
     if (sincronizando) return;
