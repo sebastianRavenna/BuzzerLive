@@ -106,7 +106,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
 
   useEffect(() => {
     const channel = supabase
-      .channel(`acciones-log-${partidoId}`)
+      .channel(`acciones-log-${partidoId}-${Date.now()}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'acciones',
         filter: `partido_id=eq.${partidoId}`,

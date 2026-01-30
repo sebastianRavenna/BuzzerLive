@@ -36,8 +36,6 @@ export function Layout() {
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-6">
                 <NavLink to="/">Inicio</NavLink>
-                <NavLink to="/posiciones">Posiciones</NavLink>
-                <NavLink to="/partidos">Partidos</NavLink>
               </nav>
               
               {/* Mobile menu button */}

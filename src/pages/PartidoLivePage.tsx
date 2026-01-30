@@ -116,116 +116,95 @@ export function PartidoLivePage() {
   useEffect(() => {
     if (!id) return;
 
+    // 🛡️ Bandera para saber si el componente sigue vivo
+    let isMounted = true;
+
     async function cargarPartido() {
       try {
         const data = await getPartidoCompleto(id!);
-        setPartido(data.partido);
-        setEquipoLocal(data.equipoLocal);
-        setEquipoVisitante(data.equipoVisitante);
-        setJugadoresLocal(data.jugadoresLocal);
-        setJugadoresVisitante(data.jugadoresVisitante);
 
+        // Solo actualizamos el estado si el usuario sigue en esta pantalla
+        if (isMounted) {
+          setPartido(data.partido);
+          setEquipoLocal(data.equipoLocal);
+          setEquipoVisitante(data.equipoVisitante);
+          setJugadoresLocal(data.jugadoresLocal);
+          setJugadoresVisitante(data.jugadoresVisitante);
 
-        // === Cargar entrenadores ===
-        // NOTA: En este sistema, equipos representan clubes, por lo que usamos equipo_id directamente
-        console.log('🏀 Cargando entrenadores...');
-        console.log('Equipo Local ID:', data.partido.equipo_local_id);
-        console.log('Equipo Visitante ID:', data.partido.equipo_visitante_id);
-
-        try {
-          const entrenadoresL = await getEntrenadoresByClub(data.partido.equipo_local_id);
-          console.log('✅ Entrenadores locales cargados:', entrenadoresL.length);
-          setEntrenadoresLocal(entrenadoresL);
-        } catch (error) {
-          console.error('❌ Error cargando entrenadores locales:', error);
-          setEntrenadoresLocal([]);
-        }
-
-        try {
-          const entrenadoresV = await getEntrenadoresByClub(data.partido.equipo_visitante_id);
-          console.log('✅ Entrenadores visitantes cargados:', entrenadoresV.length);
-          setEntrenadoresVisitante(entrenadoresV);
-        } catch (error) {
-          console.error('❌ Error cargando entrenadores visitantes:', error);
-          setEntrenadoresVisitante([]);
-        }
-
-        if (data.partido.estado === 'PROGRAMADO') {
-          // Verificar si algún equipo tiene más de 12 jugadores
-          const necesitaCitadosLocal = data.jugadoresLocal.length > 12;
-          const necesitaCitadosVisitante = data.jugadoresVisitante.length > 12;
-          
-          if (necesitaCitadosLocal || necesitaCitadosVisitante) {
-            // Ir a selección de citados
-            setFase('seleccion-citados');
-            // Si un equipo tiene ≤12, marcar todos como citados automáticamente
-            if (!necesitaCitadosLocal) {
-              setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
-            }
-            if (!necesitaCitadosVisitante) {
-              setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
-            }
-          } else {
-            // Todos los jugadores son citados automáticamente
-            setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
-            setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
-            setFase('seleccion-titulares');
+          // === Cargar entrenadores (Ahora dentro del check de isMounted) ===
+          try {
+            const entrenadoresL = await getEntrenadoresByClub(data.partido.equipo_local_id);
+            if (isMounted) setEntrenadoresLocal(entrenadoresL);
+          } catch (error) {
+            console.error('❌ Error cargando entrenadores locales:', error);
+            if (isMounted) setEntrenadoresLocal([]);
           }
-        } else if (data.partido.estado === 'EN_CURSO') {
-          // Recuperar titulares usando es_titular de la BD
-          // Si no hay marcados como titular, usar los que participaron
-          // Si aún así no hay 5, completar con los primeros de la lista
-          const obtenerTitulares = (jugadores: JugadorEnPartido[]) => {
-            // Primero, intentar con es_titular
-            const titulares = jugadores.filter(j => j.es_titular);
-            if (titulares.length === 5) {
-              return new Set(titulares.map(j => j.id));
+
+          try {
+            const entrenadoresV = await getEntrenadoresByClub(data.partido.equipo_visitante_id);
+            if (isMounted) setEntrenadoresVisitante(entrenadoresV);
+          } catch (error) {
+            console.error('❌ Error cargando entrenadores visitantes:', error);
+            if (isMounted) setEntrenadoresVisitante([]);
+          }
+
+          // === Lógica de Estado (Mantenemos la lógica original) ===
+          if (data.partido.estado === 'PROGRAMADO') {
+            const necesitaCitadosLocal = data.jugadoresLocal.length > 12;
+            const necesitaCitadosVisitante = data.jugadoresVisitante.length > 12;
+
+            if (necesitaCitadosLocal || necesitaCitadosVisitante) {
+              setFase('seleccion-citados');
+              if (!necesitaCitadosLocal) setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
+              if (!necesitaCitadosVisitante) setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
+            } else {
+              setCitadosLocal(new Set(data.jugadoresLocal.map(j => j.id)));
+              setCitadosVisitante(new Set(data.jugadoresVisitante.map(j => j.id)));
+              setFase('seleccion-titulares');
             }
-            
-            // Si no hay titulares marcados, usar los que participaron
-            const participaron = jugadores.filter(j => j.participo);
-            if (participaron.length >= 5) {
-              return new Set(participaron.slice(0, 5).map(j => j.id));
-            }
-            
-            // Si no hay suficientes que participaron, completar con los primeros
-            const ids = new Set(participaron.map(j => j.id));
-            for (const j of jugadores) {
-              if (ids.size >= 5) break;
-              ids.add(j.id);
-            }
-            return ids;
-          };
-          
-          // Los citados son todos los que participaron o están marcados
-          // (para partidos ya en curso, tomamos los primeros 12 o todos si son menos)
-          setCitadosLocal(new Set(data.jugadoresLocal.slice(0, 12).map(j => j.id)));
-          setCitadosVisitante(new Set(data.jugadoresVisitante.slice(0, 12).map(j => j.id)));
-          
-          setTitularesLocal(obtenerTitulares(data.jugadoresLocal));
-          setTitularesVisitante(obtenerTitulares(data.jugadoresVisitante));
-          setFase('en-juego');
-        } else {
-          setFase('finalizado');
+          } else if (data.partido.estado === 'EN_CURSO') {
+            // Función auxiliar para recuperar titulares
+            const obtenerTitulares = (jugadores: JugadorEnPartido[]) => {
+              const titulares = jugadores.filter(j => j.es_titular);
+              if (titulares.length === 5) return new Set(titulares.map(j => j.id));
+              const participaron = jugadores.filter(j => j.participo);
+              if (participaron.length >= 5) return new Set(participaron.slice(0, 5).map(j => j.id));
+              const ids = new Set(participaron.map(j => j.id));
+              for (const j of jugadores) {
+                if (ids.size >= 5) break;
+                ids.add(j.id);
+              }
+              return ids;
+            };
+
+            setCitadosLocal(new Set(data.jugadoresLocal.slice(0, 12).map(j => j.id)));
+            setCitadosVisitante(new Set(data.jugadoresVisitante.slice(0, 12).map(j => j.id)));
+            setTitularesLocal(obtenerTitulares(data.jugadoresLocal));
+            setTitularesVisitante(obtenerTitulares(data.jugadoresVisitante));
+            setFase('en-juego');
+          } else {
+            setFase('finalizado');
+          }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar partido');
+        if (isMounted) setError(err instanceof Error ? err.message : 'Error al cargar partido');
       }
     }
 
     cargarPartido();
+
+    return () => { isMounted = false; };
   }, [id]);
 
-  // Cargar estado de faltas del entrenador desde las acciones (solo una vez al inicio)
+  // Cargar estado de faltas del entrenador
   useEffect(() => {
+    // ⚠️ Ahora esperamos a que los equipos estén cargados
     if (!id || !equipoLocal?.id || !equipoVisitante?.id) return;
 
-    async function cargarFaltasEntrenador() {
-      // Verificación adicional para TypeScript
-      if (!equipoLocal || !equipoVisitante) return;
+    let isMounted = true;
 
+    async function cargarFaltasEntrenador() {
       try {
-        // Obtener todas las acciones de faltas del entrenador
         const { data: acciones } = await supabase
           .from('acciones')
           .select('equipo_id, tipo')
@@ -233,36 +212,39 @@ export function PartidoLivePage() {
           .eq('anulada', false)
           .in('tipo', ['FALTA_TECNICA_ENTRENADOR', 'FALTA_TECNICA_BANCO', 'FALTA_DESCALIFICANTE_ENTRENADOR']);
 
-        if (acciones) {
-          // Contar faltas por equipo
-          const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal.id);
-          const faltasVisitante = acciones.filter(a => a.equipo_id === equipoVisitante.id);
+        if (acciones && isMounted) {
+          const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal!.id);
+          const faltasVisitante = acciones.filter(a => a.equipo_id === equipoVisitante!.id);
 
-          // Reconstruir estado del entrenador local
+          // Lógica entrenador LOCAL
           const ftEntrenadorLocal = faltasLocal.filter(a => a.tipo === 'FALTA_TECNICA_ENTRENADOR').length;
           const ftBancoLocal = faltasLocal.filter(a => a.tipo === 'FALTA_TECNICA_BANCO').length;
           const expulsadoDirectoLocal = faltasLocal.some(a => a.tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR');
           const descalificadoLocal = expulsadoDirectoLocal || ftEntrenadorLocal >= 2 || (ftEntrenadorLocal + ftBancoLocal) >= 3;
 
-          setEntrenadorLocal({
-            faltasTecnicasEntrenador: ftEntrenadorLocal,
-            faltasTecnicasBanco: ftBancoLocal,
-            expulsadoDirecto: expulsadoDirectoLocal,
-            descalificado: descalificadoLocal,
-          });
+          if (isMounted) {
+            setEntrenadorLocal({
+              faltasTecnicasEntrenador: ftEntrenadorLocal,
+              faltasTecnicasBanco: ftBancoLocal,
+              expulsadoDirecto: expulsadoDirectoLocal,
+              descalificado: descalificadoLocal,
+            });
+          }
 
-          // Reconstruir estado del entrenador visitante
+          // Lógica entrenador VISITANTE
           const ftEntrenadorVisitante = faltasVisitante.filter(a => a.tipo === 'FALTA_TECNICA_ENTRENADOR').length;
           const ftBancoVisitante = faltasVisitante.filter(a => a.tipo === 'FALTA_TECNICA_BANCO').length;
           const expulsadoDirectoVisitante = faltasVisitante.some(a => a.tipo === 'FALTA_DESCALIFICANTE_ENTRENADOR');
           const descalificadoVisitante = expulsadoDirectoVisitante || ftEntrenadorVisitante >= 2 || (ftEntrenadorVisitante + ftBancoVisitante) >= 3;
 
-          setEntrenadorVisitante({
-            faltasTecnicasEntrenador: ftEntrenadorVisitante,
-            faltasTecnicasBanco: ftBancoVisitante,
-            expulsadoDirecto: expulsadoDirectoVisitante,
-            descalificado: descalificadoVisitante,
-          });
+          if (isMounted) {
+            setEntrenadorVisitante({
+              faltasTecnicasEntrenador: ftEntrenadorVisitante,
+              faltasTecnicasBanco: ftBancoVisitante,
+              expulsadoDirecto: expulsadoDirectoVisitante,
+              descalificado: descalificadoVisitante,
+            });
+          }
         }
       } catch (err) {
         console.error('Error cargando faltas del entrenador:', err);
@@ -270,19 +252,25 @@ export function PartidoLivePage() {
     }
 
     cargarFaltasEntrenador();
-    // Solo ejecutar cuando se carga el partido (id, equipoLocal.id, equipoVisitante.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+
+    return () => { isMounted = false; };
+  }, [id, equipoLocal?.id, equipoVisitante?.id]); // ✅ Dependencias corregidas
 
   // Suscribirse a cambios en tiempo real
   useEffect(() => {
     if (!id) return;
 
+    // Guardamos la función de limpieza que nos devuelve el servicio
     const unsubscribe = suscribirseAPartido(id!, (cambios) => {
       setPartido(prev => prev ? { ...prev, ...cambios } : null);
     });
 
-    return unsubscribe;
+    // React ejecutará esto al desmontar o si cambia el ID
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, [id]);
 
   // Detectar cambios de conexión
