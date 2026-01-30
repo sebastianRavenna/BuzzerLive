@@ -30,8 +30,7 @@ export function Layout() {
             <div className="flex items-center justify-between h-16">
               {/* Logo */}
               <Link to="/" className="flex items-center gap-2">
-                <span className="text-2xl">🏀</span>
-                <span className="text-xl font-bold">BuzzerLive</span>
+                <img src="logo_horizontal.png" alt="Logo BuzzerLive" className='w-50 mx-auto'/>
               </Link>
               
               {/* Navigation */}
