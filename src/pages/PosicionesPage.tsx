@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { TablaPosicion, Torneo } from '../types';
@@ -13,7 +13,7 @@ export function PosicionesPage() {
   const configured = isSupabaseConfigured();
 
   // Cargar torneos
-  const fetchTorneos = async () => {
+  const fetchTorneos = useCallback(async () => {
     if (!configured) {
       setLoading(false);
       return;
@@ -36,16 +36,16 @@ export function PosicionesPage() {
           setTorneoSeleccionado(result.data[0].id);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en fetchTorneos:', error);
-      setError(error.message || 'Error al cargar torneos');
+      setError((error as Error).message || 'Error al cargar torneos');
     } finally {
       setLoading(false);
     }
-  };
+  }, [configured]);
 
   // Cargar posiciones cuando cambia el torneo
-  const fetchPosiciones = async () => {
+  const fetchPosiciones = useCallback(async () => {
     if (!torneoSeleccionado || !configured) return;
 
     try {
@@ -62,19 +62,19 @@ export function PosicionesPage() {
       } else if (result.data) {
         setPosiciones(result.data);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en fetchPosiciones:', error);
-      setError(error.message || 'Error al cargar posiciones');
+      setError((error as Error).message || 'Error al cargar posiciones');
     }
-  };
+  }, [torneoSeleccionado, configured]);
 
   useEffect(() => {
     fetchTorneos();
-  }, [configured]);
+  }, [fetchTorneos]);
 
   useEffect(() => {
     fetchPosiciones();
-  }, [torneoSeleccionado, configured]);
+  }, [fetchPosiciones]);
 
   // Auto-refresh cuando vuelve de minimizar o recupera conexión
   useAutoRefresh(() => {

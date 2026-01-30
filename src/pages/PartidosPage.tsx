@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
 import { reanudarPartido } from '../services/partido.service';
@@ -34,7 +34,7 @@ export function PartidosPage() {
     }
   };
 
-  const fetchPartidos = async () => {
+  const fetchPartidos = useCallback(async () => {
     if (!configured) {
       setLoading(false);
       return;
@@ -94,17 +94,17 @@ export function PartidosPage() {
 
         setPartidos(ordenados);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en fetchPartidos:', error);
-      setError(error.message || 'Error al cargar partidos');
+      setError((error as Error).message || 'Error al cargar partidos');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtro, configured]);
 
   useEffect(() => {
     fetchPartidos();
-  }, [filtro, configured]);
+  }, [fetchPartidos]);
 
   // Auto-refresh cuando vuelve de minimizar o recupera conexión
   useAutoRefresh(() => {

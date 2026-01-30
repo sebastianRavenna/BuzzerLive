@@ -9,7 +9,7 @@ import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, 
 import { imprimirPlanilla } from '../services/pdf.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import ImageUpload from '../components/common/ImageUpload';
-import type { EstadoTorneo, TablaPosicion } from '../types';
+import type { EstadoTorneo } from '../types';
 
 type Tab = 'dashboard' | 'torneos' | 'clubes' | 'jugadores' | 'partidos' | 'asignaciones' | 'usuarios';
 type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
@@ -18,6 +18,7 @@ interface ClubLocal { id: string; nombre: string; nombre_corto: string; logo_url
 interface JugadorLocal { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
 interface PartidoLocal { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
 interface UsuarioLocal { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
+interface TablaPosicionLocal { equipo_id: string; nombre: string; nombre_corto: string; logo_url: string | null; pj: number; pg: number; pe: number; pp: number; pf: number; pc: number; dif: number; pts: number; }
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ export default function AdminPage() {
   const [showEquiposModal, setShowEquiposModal] = useState(false);
   const [selectedTorneo, setSelectedTorneo] = useState<Torneo | null>(null);
   const [torneoEquipos, setTorneoEquipos] = useState<TorneoEquipo[]>([]);
-  const [tablaPosiciones, setTablaPosiciones] = useState<TablaPosicion[]>([]);
+  const [tablaPosiciones, setTablaPosiciones] = useState<TablaPosicionLocal[]>([]);
 
   const [showClubModal, setShowClubModal] = useState(false);
   const [editingClub, setEditingClub] = useState<ClubLocal | null>(null);
@@ -95,7 +96,13 @@ export default function AdminPage() {
       getPartidosSinPlanillero(orgId),
       getUsuariosDisponibles(orgId),
     ]);
-    setTorneos(torneosData); setClubes(clubesRes.data || []); setJugadores(jugadoresRes.data || []); setPartidos(partidosRes.data || []); setUsuarios(usuariosRes.data || []); setPartidosSinAsignar(sinAsignar); setUsuariosDisponibles(disponibles);
+    setTorneos(torneosData);
+    setClubes(clubesRes.data || []);
+    setJugadores(jugadoresRes.data || []);
+    setPartidos(partidosRes.data || []);
+    setUsuarios((usuariosRes.data || []) as unknown as UsuarioLocal[]);
+    setPartidosSinAsignar(sinAsignar);
+    setUsuariosDisponibles(disponibles);
     setLoading(false);
   }, [user?.organizacion_id]);
 
