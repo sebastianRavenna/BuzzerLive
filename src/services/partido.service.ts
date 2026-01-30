@@ -426,12 +426,16 @@ export async function getAcciones(partidoId: string, limit = 10) {
 }
 
 // Suscribirse a cambios del partido en tiempo real
+// ✅ FUNCIÓN CORREGIDA: Devuelve cleanup y usa ID único
 export function suscribirseAPartido(
-  partidoId: string, 
+  partidoId: string,
   onUpdate: (partido: Partial<Partido>) => void
 ) {
+  // 1. Generamos ID único para el canal
+  const uniqueChannelId = `partido-${partidoId}-${Date.now()}`;
+
   const channel = supabase
-    .channel(`partido-${partidoId}`)
+    .channel(uniqueChannelId)
     .on(
       'postgres_changes',
       {
@@ -446,6 +450,7 @@ export function suscribirseAPartido(
     )
     .subscribe();
 
+  // 2. Retornamos la función de limpieza que usará el useEffect
   return () => {
     supabase.removeChannel(channel);
   };

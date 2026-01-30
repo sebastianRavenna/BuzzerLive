@@ -43,6 +43,8 @@ export function MarcadorPublicoPage() {
   useEffect(() => {
     if (!id) return;
 
+    let isMounted = true;
+
     async function cargarPartido() {
       try {
         // Obtener partido
@@ -55,7 +57,7 @@ export function MarcadorPublicoPage() {
         if (errorPartido) throw errorPartido;
         if (!partidoData) throw new Error('Partido no encontrado');
 
-        setPartido(partidoData as Partido);
+        if (isMounted) setPartido(partidoData as Partido);
 
         // Obtener equipos
         const { data: localData } = await supabase
@@ -70,16 +72,20 @@ export function MarcadorPublicoPage() {
           .eq('id', partidoData.equipo_visitante_id)
           .single();
 
-        setEquipoLocal(localData as Equipo);
-        setEquipoVisitante(visitanteData as Equipo);
+        if (isMounted) {
+          setEquipoLocal(localData as Equipo);
+          setEquipoVisitante(visitanteData as Equipo);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar partido');
+        if (isMounted) setError(err instanceof Error ? err.message : 'Error al cargar partido');
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
 
     cargarPartido();
+
+    return () => { isMounted = false; };
   }, [id]);
 
   // Suscribirse a cambios en tiempo real
@@ -87,7 +93,7 @@ export function MarcadorPublicoPage() {
     if (!id) return;
 
     const channel = supabase
-      .channel(`marcador-publico-${id}`)
+      .channel(`marcador-publico-${id}-${Date.now()}`)
       .on(
         'postgres_changes',
         {

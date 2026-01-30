@@ -20,18 +20,39 @@ function App() {
   const [user, setUser] = useState<Usuario | null>(null);
 
   useEffect(() => {
-    // Inicializar autenticación
-    initAuth().then(() => {
-      setUser(getCurrentUser());
-      setLoading(false);
-    });
+    let isMounted = true; // 🛡️ Protección contra actualizaciones en componentes desmontados
 
-    // Escuchar cambios
+    const init = async () => {
+      try {
+        await initAuth();
+        const currentUser = getCurrentUser();
+        // Solo actualizamos el estado si el componente sigue montado
+        if (isMounted) {
+          setUser(currentUser);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error inicializando auth:", error);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    // Escuchar cambios de sesión
     const unsubscribe = onAuthChange((u) => {
-      setUser(u);
+      if (isMounted) {
+        setUser(u);
+      }
     });
 
-    return unsubscribe;
+    // Cleanup robusto
+    return () => {
+      isMounted = false;
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, []);
 
   if (loading) {
