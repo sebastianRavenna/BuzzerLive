@@ -302,27 +302,29 @@ export function PartidoLivePage() {
       const connectionState = supabase.realtime.connectionState() as string;
       console.log(`🔌 Estado de Realtime: ${connectionState}`);
 
-      // Si no está conectado, reconectar
+      // Solo reconectar y recargar si el WebSocket estaba cerrado
       if (connectionState !== 'open') {
         console.log('🔄 Reconectando Supabase Realtime...');
         supabase.realtime.connect();
 
         // Esperar un momento a que se establezca la conexión
         await new Promise(resolve => setTimeout(resolve, 500));
-      }
 
-      // Recargar datos del partido
-      console.log('🔄 Recargando datos del partido...');
-      try {
-        const data = await getPartidoCompleto(id);
-        setPartido(data.partido);
-        setEquipoLocal(data.equipoLocal);
-        setEquipoVisitante(data.equipoVisitante);
-        setJugadoresLocal(data.jugadoresLocal);
-        setJugadoresVisitante(data.jugadoresVisitante);
-        console.log('✅ Datos recargados exitosamente');
-      } catch (err) {
-        console.error('❌ Error recargando datos:', err);
+        // Recargar datos solo después de reconectar
+        console.log('🔄 Recargando datos del partido...');
+        try {
+          const data = await getPartidoCompleto(id);
+          setPartido(data.partido);
+          setEquipoLocal(data.equipoLocal);
+          setEquipoVisitante(data.equipoVisitante);
+          setJugadoresLocal(data.jugadoresLocal);
+          setJugadoresVisitante(data.jugadoresVisitante);
+          console.log('✅ Datos recargados exitosamente');
+        } catch (err) {
+          console.error('❌ Error recargando datos:', err);
+        }
+      } else {
+        console.log('✅ WebSocket ya estaba conectado, no es necesario recargar');
       }
     };
 
