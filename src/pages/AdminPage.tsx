@@ -92,7 +92,7 @@ export default function AdminPage() {
       supabase.from('equipos').select('*').eq('organizacion_id', orgId).order('nombre'),
       supabase.from('jugadores').select('*, equipo:equipos(nombre_corto)').eq('organizacion_id', orgId).order('apellido'),
       supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre)').eq('organizacion_id', orgId).order('fecha', { ascending: false }).limit(100),
-      supabase.from('usuarios').select('*, club:equipos(nombre_corto)').eq('organizacion_id', orgId).order('nombre'),
+      supabase.from('usuarios').select('id, email, nombre, apellido, rol, activo, club_id, club:equipos(nombre_corto)').eq('organizacion_id', orgId).order('nombre'),
       getPartidosSinPlanillero(orgId),
       getUsuariosDisponibles(orgId),
     ]);
@@ -100,7 +100,7 @@ export default function AdminPage() {
     setClubes(clubesRes.data || []);
     setJugadores(jugadoresRes.data || []);
     setPartidos(partidosRes.data || []);
-    setUsuarios((usuariosRes.data || []) as unknown as UsuarioLocal[]);
+    setUsuarios(usuariosRes.data || []);
     setPartidosSinAsignar(sinAsignar);
     setUsuariosDisponibles(disponibles);
     setLoading(false);
