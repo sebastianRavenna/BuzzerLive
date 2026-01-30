@@ -16,9 +16,6 @@ interface AccionPendiente {
 const STORAGE_KEY = 'buzzer_offline_queue';
 const MAX_INTENTOS = 5;
 
-// 🔒 SEMÁFORO: Variable global para evitar ejecuciones simultáneas
-let isSyncing = false;
-
 // Obtener cola de localStorage
 export function getOfflineQueue(): AccionPendiente[] {
   try {
@@ -73,81 +70,55 @@ export function removeFromOfflineQueue(accionId: string): void {
 export async function syncOfflineQueue(
   onProgress?: (synced: number, total: number) => void
 ): Promise<{ success: number; failed: number }> {
-  // 🛡️ 1. Protección contra doble ejecución
-  if (isSyncing) {
-    console.log("⚠️ Sincronización ya en curso, ignorando solicitud.");
-    return { success: 0, failed: 0 };
-  }
-
-  isSyncing = true;
-  let queue = getOfflineQueue(); // Lectura inicial
-
+  const queue = getOfflineQueue();
+  
   if (queue.length === 0) {
-    isSyncing = false;
     return { success: 0, failed: 0 };
   }
 
   let success = 0;
   let failed = 0;
 
-  // Clona la cola para iterar, pero usaremos 'queue' (fresco) para guardar
-  const queueToProcess = [...queue];
+  for (let i = 0; i < queue.length; i++) {
+    const accion = queue[i];
+    
+    try {
+      if (accion.esDescuento) {
+        await syncDescontarAccion(accion);
+      } else {
+        const { error } = await supabase.rpc('registrar_accion', {
+          p_partido_id: accion.partidoId,
+          p_equipo_id: accion.equipoId,
+          p_jugador_id: accion.jugadorId,
+          p_tipo: accion.tipo,
+          p_cuarto: accion.cuarto,
+          p_timestamp_local: accion.timestamp,
+          p_cliente_id: getClienteId(),
+        });
 
-  try {
-    for (let i = 0; i < queueToProcess.length; i++) {
-      const accion = queueToProcess[i];
-
-      try {
-        // Lógica de envío
-        if (accion.esDescuento) {
-          await syncDescontarAccion(accion);
-        } else {
-          const { error } = await supabase.rpc('registrar_accion', {
-            p_partido_id: accion.partidoId,
-            p_equipo_id: accion.equipoId,
-            p_jugador_id: accion.jugadorId,
-            p_tipo: accion.tipo,
-            p_cuarto: accion.cuarto,
-            p_timestamp_local: accion.timestamp,
-            p_cliente_id: getClienteId(),
-          });
-
-          if (error) throw error;
-        }
-
-        // ✅ Éxito: Removemos de la memoria y actualizamos LS inmediatamente
-        queue = queue.filter(a => a.id !== accion.id);
-        saveOfflineQueue(queue);
-        success++;
-
-      } catch (err) {
-        console.error(`Error sincronizando acción ${accion.tipo}:`, err);
-
-        // ❌ Fallo: Actualizamos intentos
-        // Volvemos a leer la cola fresca por si algo cambió externamente
-        queue = getOfflineQueue();
-        const currentAccionIndex = queue.findIndex(a => a.id === accion.id);
-
-        if (currentAccionIndex !== -1) {
-          const currentAccion = queue[currentAccionIndex];
-          currentAccion.intentos++;
-
-          if (currentAccion.intentos >= MAX_INTENTOS) {
-            // Eliminar si superó intentos
-            queue = queue.filter(a => a.id !== accion.id);
-            failed++;
-          }
-          // Si no superó intentos, se mantiene en cola para próximo intento
-          saveOfflineQueue(queue);
-        }
+        if (error) throw error;
       }
 
-      // Notificar progreso
-      onProgress?.(i + 1, queueToProcess.length);
+      removeFromOfflineQueue(accion.id);
+      success++;
+    } catch (err) {
+      accion.intentos++;
+      
+      if (accion.intentos >= MAX_INTENTOS) {
+        removeFromOfflineQueue(accion.id);
+        failed++;
+      } else {
+        const currentQueue = getOfflineQueue();
+        const idx = currentQueue.findIndex(a => a.id === accion.id);
+        if (idx !== -1) {
+          currentQueue[idx] = accion;
+          saveOfflineQueue(currentQueue);
+        }
+        failed++;
+      }
     }
-  } finally {
-    // 🔓 Liberar el semáforo SIEMPRE, pase lo que pase
-    isSyncing = false;
+
+    onProgress?.(i + 1, queue.length);
   }
 
   return { success, failed };

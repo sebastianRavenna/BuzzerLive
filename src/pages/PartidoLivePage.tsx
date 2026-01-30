@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import {
-  getPartidoCompleto,
-  iniciarPartido,
+import { 
+  getPartidoCompleto, 
+  iniciarPartido, 
   registrarAccion,
   registrarAccionSistema,
   cambiarCuarto,
@@ -22,7 +22,6 @@ import {
 } from '../services/offlineQueue';
 import { LogAcciones } from '../components/common/LogAcciones';
 import { getEntrenadoresByClub } from '../services/club.service';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type {
   Partido,
   Equipo,
@@ -112,20 +111,6 @@ export function PartidoLivePage() {
   const [online, setOnline] = useState(isOnline());
   const [pendientes, setPendientes] = useState(getOfflineQueue().length);
   const [sincronizando, setSincronizando] = useState(false);
-
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(async () => {
-    if (id && fase === 'en-juego') {
-      try {
-        const data = await getPartidoCompleto(id);
-        setPartido(data.partido);
-        setJugadoresLocal(data.jugadoresLocal);
-        setJugadoresVisitante(data.jugadoresVisitante);
-      } catch (err) {
-        console.error('Error refrescando partido:', err);
-      }
-    }
-  });
 
   // Cargar datos del partido
   useEffect(() => {

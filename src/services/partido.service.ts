@@ -180,12 +180,7 @@ export async function registrarAccion(
       .single();
     
     if (accionCreada) {
-      const updateData: {
-        tiros_libres?: number;
-        numero_falta?: number;
-        puntos_local?: number;
-        puntos_visitante?: number;
-      } = {};
+      const updateData: any = {};
       if (tirosLibres > 0) updateData.tiros_libres = tirosLibres;
       if (numeroFalta !== null) updateData.numero_falta = numeroFalta;
       if (puntosLocal !== null) updateData.puntos_local = puntosLocal;

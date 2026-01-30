@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { getTablaPosiciones } from '../services/torneo.service';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { Organizacion, Torneo, MarcadorPartido } from '../types';
 
 // Tipo para posiciones (coincide con lo que retorna getTablaPosiciones)
@@ -34,53 +33,53 @@ export function PublicDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Cargar organización y torneos
-  const loadData = async () => {
-    if (!orgSlug) {
-      setError('Organización no especificada');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // Obtener organización
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizaciones')
-        .select('*')
-        .eq('slug', orgSlug)
-        .single();
-
-      if (orgError) throw orgError;
-      if (!orgData) {
-        setError('Organización no encontrada');
+  useEffect(() => {
+    async function loadData() {
+      if (!orgSlug) {
+        setError('Organización no especificada');
         setLoading(false);
         return;
       }
 
-      setOrg(orgData);
+      try {
+        // Obtener organización
+        const { data: orgData, error: orgError } = await supabase
+          .from('organizaciones')
+          .select('*')
+          .eq('slug', orgSlug)
+          .single();
 
-      // Obtener torneos activos (PROGRAMADO, PLANIFICACION, EN_CURSO)
-      const { data: torneosData, error: torneosError } = await supabase
-        .from('torneos')
-        .select('*')
-        .eq('organizacion_id', orgData.id)
-        .in('estado', ['PROGRAMADO', 'PLANIFICACION', 'EN_CURSO'])
-        .order('created_at', { ascending: false });
+        if (orgError) throw orgError;
+        if (!orgData) {
+          setError('Organización no encontrada');
+          setLoading(false);
+          return;
+        }
 
-      if (torneosError) {
-        console.error('Error cargando torneos:', torneosError);
-        throw torneosError;
+        setOrg(orgData);
+
+        // Obtener torneos activos (PROGRAMADO, PLANIFICACION, EN_CURSO)
+        const { data: torneosData, error: torneosError } = await supabase
+          .from('torneos')
+          .select('*')
+          .eq('organizacion_id', orgData.id)
+          .in('estado', ['PROGRAMADO', 'PLANIFICACION', 'EN_CURSO'])
+          .order('created_at', { ascending: false });
+
+        if (torneosError) {
+          console.error('Error cargando torneos:', torneosError);
+          throw torneosError;
+        }
+
+        setTorneos(torneosData || []);
+      } catch (err) {
+        console.error('Error cargando datos:', err);
+        setError('Error al cargar los datos');
+      } finally {
+        setLoading(false);
       }
-
-      setTorneos(torneosData || []);
-    } catch (err) {
-      console.error('Error cargando datos:', err);
-      setError('Error al cargar los datos');
-    } finally {
-      setLoading(false);
     }
-  };
 
-  useEffect(() => {
     loadData();
   }, [orgSlug]);
 
@@ -146,62 +145,6 @@ export function PublicDashboardPage() {
 
     loadTorneoData();
   }, [selectedTorneo]);
-
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(() => {
-    if (orgSlug) {
-      loadData();
-      if (selectedTorneo) {
-        const loadTorneoData = async () => {
-          try {
-            const posicionesData = await getTablaPosiciones(selectedTorneo.id);
-            setPosiciones(posicionesData);
-
-            const { data: partidosData } = await supabase
-              .from('partidos')
-              .select(`
-                *,
-                equipo_local:equipos!partidos_equipo_local_id_fkey(nombre, nombre_corto, escudo_url),
-                equipo_visitante:equipos!partidos_equipo_visitante_id_fkey(nombre, nombre_corto, escudo_url)
-              `)
-              .eq('torneo_id', selectedTorneo.id)
-              .order('fecha', { ascending: true });
-
-            const partidosFormateados = (partidosData || []).map(p => ({
-              partido_id: p.id,
-              estado: p.estado,
-              cuarto_actual: p.cuarto_actual,
-              fecha: p.fecha,
-              hora: p.hora,
-              lugar: p.lugar,
-              local_id: p.equipo_local_id,
-              local_nombre: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.nombre : p.equipo_local?.nombre,
-              local_nombre_corto: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.nombre_corto : p.equipo_local?.nombre_corto,
-              local_escudo: Array.isArray(p.equipo_local) ? p.equipo_local[0]?.escudo_url : p.equipo_local?.escudo_url,
-              puntos_local: p.puntos_local,
-              visitante_id: p.equipo_visitante_id,
-              visitante_nombre: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.nombre : p.equipo_visitante?.nombre,
-              visitante_nombre_corto: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.nombre_corto : p.equipo_visitante?.nombre_corto,
-              visitante_escudo: Array.isArray(p.equipo_visitante) ? p.equipo_visitante[0]?.escudo_url : p.equipo_visitante?.escudo_url,
-              puntos_visitante: p.puntos_visitante,
-              torneo_nombre: selectedTorneo.nombre,
-              torneo_categoria: selectedTorneo.categoria || '',
-              faltas_equipo_local: p.faltas_equipo_local || [],
-              faltas_equipo_visitante: p.faltas_equipo_visitante || [],
-              tiempos_muertos_local: p.tiempos_muertos_local || 0,
-              tiempos_muertos_visitante: p.tiempos_muertos_visitante || 0,
-              puntos_por_cuarto: p.puntos_por_cuarto || { local: [], visitante: [] }
-            }));
-
-            setPartidos(partidosFormateados);
-          } catch (err) {
-            console.error('Error refrescando datos del torneo:', err);
-          }
-        };
-        loadTorneoData();
-      }
-    }
-  });
 
   if (loading) {
     return (

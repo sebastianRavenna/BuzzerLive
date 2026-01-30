@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { reanudarPartido } from '../services/partido.service';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido } from '../types';
 
 type FiltroPartido = 'todos' | 'en_curso' | 'programados' | 'finalizados';
@@ -21,7 +20,7 @@ export function PartidosPage() {
   const [filtro, setFiltro] = useState<FiltroPartido>(filtroInicial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  
   const configured = isSupabaseConfigured();
 
   // Actualizar URL cuando cambia el filtro
@@ -33,17 +32,18 @@ export function PartidosPage() {
       setSearchParams({ estado: nuevoFiltro });
     }
   };
-
-  const fetchPartidos = useCallback(async () => {
+  
+  useEffect(() => {
     if (!configured) {
       setLoading(false);
       return;
     }
-
-    try {
-      // Query directa sin withRetry
-      let query = supabase.from('marcador_partido').select('*');
-
+    
+    async function fetchPartidos() {
+      let query = supabase
+        .from('marcador_partido')
+        .select('*');
+      
       if (filtro === 'en_curso') {
         query = query.eq('estado', 'EN_CURSO');
       } else if (filtro === 'programados') {
@@ -51,14 +51,14 @@ export function PartidosPage() {
       } else if (filtro === 'finalizados') {
         query = query.eq('estado', 'FINALIZADO');
       }
-
-      const result = await query.limit(50);
-
-      if (result.error) {
-        setError(result.error.message);
-      } else if (result.data) {
+      
+      const { data, error } = await query.limit(50);
+      
+      if (error) {
+        setError(error.message);
+      } else if (data) {
         // Ordenar partidos: EN_CURSO primero, luego SUSPENDIDOS/PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
-        const ordenados = [...result.data].sort((a, b) => {
+        const ordenados = [...data].sort((a, b) => {
           // Prioridad por estado: SUSPENDIDO se trata como PROGRAMADO
           const prioridad: Record<string, number> = {
             'EN_CURSO': 0,
@@ -67,18 +67,18 @@ export function PartidosPage() {
             'FINALIZADO': 2,
             'POSTERGADO': 3
           };
-
+          
           const prioridadA = prioridad[a.estado] ?? 5;
           const prioridadB = prioridad[b.estado] ?? 5;
-
+          
           if (prioridadA !== prioridadB) {
             return prioridadA - prioridadB;
           }
-
+          
           // Dentro del mismo estado, ordenar por fecha
           const fechaA = new Date(a.fecha).getTime();
           const fechaB = new Date(b.fecha).getTime();
-
+          
           if (a.estado === 'PROGRAMADO' || a.estado === 'SUSPENDIDO') {
             // Programados y suspendidos: más próximo primero (fecha ascendente)
             return fechaA - fechaB;
@@ -87,27 +87,14 @@ export function PartidosPage() {
             return fechaB - fechaA;
           }
         });
-
+        
         setPartidos(ordenados);
       }
-    } catch (error: unknown) {
-      console.error('Error en fetchPartidos:', error);
-      setError((error as Error).message || 'Error al cargar partidos');
-    } finally {
       setLoading(false);
     }
-  }, [filtro, configured]);
-
-  useEffect(() => {
+    
     fetchPartidos();
-  }, [fetchPartidos]);
-
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(() => {
-    if (configured) {
-      fetchPartidos();
-    }
-  });
+  }, [filtro, configured]);
   
   if (!configured) {
     return (

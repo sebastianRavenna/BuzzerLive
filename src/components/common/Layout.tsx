@@ -30,12 +30,15 @@ export function Layout() {
             <div className="flex items-center justify-between h-16">
               {/* Logo */}
               <Link to="/" className="flex items-center gap-2">
-                <img src="logo_horizontal.png" alt="Logo BuzzerLive" className='w-50 mx-auto'/>
+                <span className="text-2xl">🏀</span>
+                <span className="text-xl font-bold">BuzzerLive</span>
               </Link>
               
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-6">
                 <NavLink to="/">Inicio</NavLink>
+                <NavLink to="/posiciones">Posiciones</NavLink>
+                <NavLink to="/partidos">Partidos</NavLink>
               </nav>
               
               {/* Mobile menu button */}

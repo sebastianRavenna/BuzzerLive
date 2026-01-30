@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
 
@@ -101,26 +100,6 @@ export default function ClubPage() {
     return unsubscribe;
   }, []);
 
-  const loadData = useCallback(async () => {
-    if (!user?.club_id || !user?.organizacion_id) return;
-    setLoading(true);
-
-    const [clubRes, jugadoresRes, entrenadoresRes, partidosRes] = await Promise.all([
-      supabase.from('equipos').select('*').eq('id', user.club_id).single(),
-      supabase.from('jugadores').select('*').eq('equipo_id', user.club_id).order('numero_camiseta'),
-      supabase.from('entrenadores').select('*').eq('equipo_id', user.club_id).order('rol'),
-      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto)')
-        .or(`equipo_local_id.eq.${user.club_id},equipo_visitante_id.eq.${user.club_id}`)
-        .order('fecha', { ascending: false }).limit(20),
-    ]);
-
-    setClub(clubRes.data);
-    setJugadores(jugadoresRes.data || []);
-    setEntrenadores(entrenadoresRes.data || []);
-    setPartidos(partidosRes.data || []);
-    setLoading(false);
-  }, [user?.club_id, user?.organizacion_id]);
-
   // Cargar datos cuando usuario esté listo
   useEffect(() => {
     if (!user) {
@@ -136,14 +115,27 @@ export default function ClubPage() {
       return;
     }
     loadData();
-  }, [user, navigate, loadData]);
+  }, [user, navigate]);
 
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(() => {
-    if (user?.club_id && user?.organizacion_id) {
-      loadData();
-    }
-  });
+  const loadData = async () => {
+    if (!user?.club_id || !user?.organizacion_id) return;
+    setLoading(true);
+    
+    const [clubRes, jugadoresRes, entrenadoresRes, partidosRes] = await Promise.all([
+      supabase.from('equipos').select('*').eq('id', user.club_id).single(),
+      supabase.from('jugadores').select('*').eq('equipo_id', user.club_id).order('numero_camiseta'),
+      supabase.from('entrenadores').select('*').eq('equipo_id', user.club_id).order('rol'),
+      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto)')
+        .or(`equipo_local_id.eq.${user.club_id},equipo_visitante_id.eq.${user.club_id}`)
+        .order('fecha', { ascending: false }).limit(20),
+    ]);
+    
+    setClub(clubRes.data);
+    setJugadores(jugadoresRes.data || []);
+    setEntrenadores(entrenadoresRes.data || []);
+    setPartidos(partidosRes.data || []);
+    setLoading(false);
+  };
 
   const handleLogout = async () => {
     await logout();

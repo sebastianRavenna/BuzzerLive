@@ -11,57 +11,46 @@ export function InstallPWA() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // 1. Verificar si ya fue descartado en esta sesión
+    // Verificar si ya fue descartado en esta sesión
     const wasDismissed = sessionStorage.getItem('pwa-install-dismissed');
     if (wasDismissed) {
       setDismissed(true);
-      return; // Si ya fue descartado, no necesitamos hacer más checks
     }
 
-    // 2. Verificar si ya está instalada (Standalone mode)
+    // Verificar si ya está instalada
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     if (isStandalone) {
-      return; // Ya está instalada
+      return; // Ya está instalada, no mostrar nada
     }
 
-    // Handler para capturar el evento de Chrome/Android
     const handleBeforeInstall = (e: Event) => {
-      e.preventDefault(); // Evitar que Chrome muestre su mini-infobar automático
+      e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowInstall(true);
     };
 
-    // Handler para cuando la instalación se completa
-    const handleAppInstalled = () => {
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    // Detectar cuando se instala
+    window.addEventListener('appinstalled', () => {
       setShowInstall(false);
       setDeferredPrompt(null);
-      console.log('Aplicación instalada con éxito');
-    };
+    });
 
-    // Agregar listeners
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    // ✅ CLEANUP: Limpiamos AMBOS listeners al desmontar
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
 
-    // Mostrar el prompt nativo del sistema
     deferredPrompt.prompt();
-
-    // Esperar a que el usuario decida
     const { outcome } = await deferredPrompt.userChoice;
-
+    
     if (outcome === 'accepted') {
       setShowInstall(false);
     }
-    // Ya no podemos usar este prompt de nuevo, lo limpiamos
     setDeferredPrompt(null);
   };
 
@@ -71,7 +60,6 @@ export function InstallPWA() {
     sessionStorage.setItem('pwa-install-dismissed', 'true');
   };
 
-  // Renderizado condicional
   if (!showInstall || dismissed) return null;
 
   return (
@@ -85,14 +73,14 @@ export function InstallPWA() {
         {/* Texto */}
         <div className="flex-1 min-w-0">
           <h3 className="text-white font-bold text-sm">Instalar BuzzerLive</h3>
-          <p className="text-white/80 text-xs">Acceso rápido y mejor rendimiento</p>
+          <p className="text-white/80 text-xs">Acceso rápido desde tu pantalla de inicio</p>
         </div>
         
         {/* Botones */}
         <div className="flex gap-2 flex-shrink-0">
           <button
             onClick={handleDismiss}
-            className="p-2 text-white/60 hover:text-white transition-colors"
+            className="p-2 text-white/60 hover:text-white"
             aria-label="Cerrar"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +89,7 @@ export function InstallPWA() {
           </button>
           <button
             onClick={handleInstall}
-            className="px-4 py-2 bg-white text-orange-600 font-bold text-sm rounded-xl hover:bg-orange-50 transition-colors shadow-sm"
+            className="px-4 py-2 bg-white text-orange-600 font-bold text-sm rounded-xl hover:bg-orange-50 transition-colors"
           >
             Instalar
           </button>

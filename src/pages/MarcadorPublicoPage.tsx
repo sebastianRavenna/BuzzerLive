@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LogAcciones } from '../components/common/LogAcciones';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { Partido, Equipo } from '../types';
 
 export function MarcadorPublicoPage() {
@@ -18,22 +17,6 @@ export function MarcadorPublicoPage() {
   const [mostrarToast, setMostrarToast] = useState(false);
   const [toastMarcador, setToastMarcador] = useState({ local: 0, visitante: 0 });
   const [toastAccion, setToastAccion] = useState<string>('');
-
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(async () => {
-    if (id) {
-      try {
-        const { data: partidoData } = await supabase
-          .from('partidos')
-          .select('*')
-          .eq('id', id)
-          .single();
-        if (partidoData) setPartido(partidoData as Partido);
-      } catch (err) {
-        console.error('Error refrescando partido:', err);
-      }
-    }
-  });
 
   // Formatear tipo de acción para el toast
   const formatearAccion = (tipo: string, valor?: number): string => {

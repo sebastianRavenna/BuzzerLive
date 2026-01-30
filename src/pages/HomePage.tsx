@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido, Organizacion } from '../types';
 
 export function HomePage() {
@@ -14,58 +13,6 @@ export function HomePage() {
   const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    if (!configured) return;
-
-    try {
-      // Usar withRetry para cada query para manejar AbortError
-      const enVivoResult = await withRetry(async () => {
-        return await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'EN_CURSO')
-          .limit(5);
-      });
-
-      if (enVivoResult.error) {
-        console.error('Error cargando partidos en vivo:', enVivoResult.error);
-      }
-
-      const finalizadosResult = await withRetry(async () => {
-        return await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'FINALIZADO')
-          .order('fecha', { ascending: false })
-          .limit(5);
-      });
-
-      if (finalizadosResult.error) {
-        console.error('Error cargando resultados:', finalizadosResult.error);
-      }
-
-      const orgsResult = await withRetry(async () => {
-        return await supabase
-          .from('organizaciones')
-          .select('*')
-          .eq('activa', true)
-          .order('nombre', { ascending: true });
-      });
-
-      if (orgsResult.error) {
-        console.error('Error cargando organizaciones:', orgsResult.error);
-      }
-
-      setPartidosEnVivo(enVivoResult.data || []);
-      setUltimosResultados(finalizadosResult.data || []);
-      setOrganizaciones(orgsResult.data || []);
-    } catch (error) {
-      console.error('Error en fetchData:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [configured]);
-
   useEffect(() => {
     if (!configured) {
       setLoading(false);
@@ -74,28 +21,68 @@ export function HomePage() {
 
     let isMounted = true;
 
-    const init = async () => {
-      // Pequeño delay para asegurar que Supabase esté completamente inicializado
-      await new Promise(resolve => setTimeout(resolve, 100));
+    async function fetchData() {
+      try {
+        // Pequeño delay para asegurar que Supabase esté completamente inicializado
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-      if (isMounted) {
-        fetchData();
+        if (!isMounted) return;
+
+        const { data: enVivo, error: errorEnVivo } = await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'EN_CURSO')
+          .limit(5);
+
+        if (errorEnVivo) {
+          console.error('Error cargando partidos en vivo:', errorEnVivo);
+        }
+
+        if (!isMounted) return;
+
+        const { data: finalizados, error: errorFinalizados } = await supabase
+          .from('marcador_partido')
+          .select('*')
+          .eq('estado', 'FINALIZADO')
+          .order('fecha', { ascending: false })
+          .limit(5);
+
+        if (errorFinalizados) {
+          console.error('Error cargando resultados:', errorFinalizados);
+        }
+
+        if (!isMounted) return;
+
+        const { data: orgs, error: errorOrgs } = await supabase
+          .from('organizaciones')
+          .select('*')
+          .eq('activa', true)
+          .order('nombre', { ascending: true });
+
+        if (errorOrgs) {
+          console.error('Error cargando organizaciones:', errorOrgs);
+        }
+
+        if (!isMounted) return;
+
+        setPartidosEnVivo(enVivo || []);
+        setUltimosResultados(finalizados || []);
+        setOrganizaciones(orgs || []);
+      } catch (error) {
+        console.error('Error en fetchData:', error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-    };
+    }
 
-    init();
+    fetchData();
 
     return () => {
       isMounted = false;
     };
-  }, [configured, fetchData]);
-
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(() => {
-    if (configured) {
-      fetchData();
-    }
-  });
+  }, [configured]);
 
   const handleLoginClick = () => {
     if (user) {

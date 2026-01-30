@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { supabase } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
-import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar, type Asignacion } from '../services/asignacion.service';
+import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
 import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../services/storage.service';
 import { descargarPlantillaJugadores, parsearExcelJugadores, importarJugadores, exportarJugadoresEquipo, type JugadorImport, type ImportResult } from '../services/excel.service';
 import { imprimirPlanilla } from '../services/pdf.service';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import ImageUpload from '../components/common/ImageUpload';
 import type { EstadoTorneo } from '../types';
 
@@ -18,7 +17,6 @@ interface ClubLocal { id: string; nombre: string; nombre_corto: string; logo_url
 interface JugadorLocal { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
 interface PartidoLocal { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
 interface UsuarioLocal { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
-interface TablaPosicionLocal { equipo_id: string; nombre: string; nombre_corto: string; logo_url: string | null; pj: number; pg: number; pe: number; pp: number; pf: number; pc: number; dif: number; pts: number; }
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -33,7 +31,7 @@ export default function AdminPage() {
   const [partidos, setPartidos] = useState<PartidoLocal[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioLocal[]>([]);
   const [partidosSinAsignar, setPartidosSinAsignar] = useState<PartidoSinAsignar[]>([]);
-  const [usuariosDisponibles, setUsuariosDisponibles] = useState<UsuarioLocal[]>([]);
+  const [usuariosDisponibles, setUsuariosDisponibles] = useState<any[]>([]);
 
   const [filtroClub, setFiltroClub] = useState('');
   const [filtroTorneo, setFiltroTorneo] = useState('');
@@ -46,7 +44,7 @@ export default function AdminPage() {
   const [showEquiposModal, setShowEquiposModal] = useState(false);
   const [selectedTorneo, setSelectedTorneo] = useState<Torneo | null>(null);
   const [torneoEquipos, setTorneoEquipos] = useState<TorneoEquipo[]>([]);
-  const [tablaPosiciones, setTablaPosiciones] = useState<TablaPosicionLocal[]>([]);
+  const [tablaPosiciones, setTablaPosiciones] = useState<any[]>([]);
 
   const [showClubModal, setShowClubModal] = useState(false);
   const [editingClub, setEditingClub] = useState<ClubLocal | null>(null);
@@ -61,7 +59,7 @@ export default function AdminPage() {
 
   const [showAsignarModal, setShowAsignarModal] = useState(false);
   const [partidoAsignar, setPartidoAsignar] = useState<PartidoSinAsignar | null>(null);
-  const [asignacionesPartido, setAsignacionesPartido] = useState<Asignacion[]>([]);
+  const [asignacionesPartido, setAsignacionesPartido] = useState<any[]>([]);
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [userForm, setUserForm] = useState({ email: '', password: '', nombre: '', apellido: '', club_id: '' });
@@ -83,43 +81,6 @@ export default function AdminPage() {
     return unsubscribe;
   }, []);
 
-  const loadData = useCallback(async () => {
-    if (!user?.organizacion_id) return;
-    setLoading(true);
-    const orgId = user.organizacion_id;
-    const [torneosData, clubesRes, jugadoresRes, partidosRes, usuariosRes, sinAsignar, disponibles] = await Promise.all([
-      getTorneos(orgId),
-      supabase.from('equipos').select('*').eq('organizacion_id', orgId).order('nombre'),
-      supabase.from('jugadores').select('*, equipo:equipos(nombre_corto)').eq('organizacion_id', orgId).order('apellido'),
-      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre)').eq('organizacion_id', orgId).order('fecha', { ascending: false }).limit(100),
-      supabase.from('usuarios').select('id, email, nombre, apellido, rol, activo, club_id, club:equipos(nombre_corto)').eq('organizacion_id', orgId).order('nombre'),
-      getPartidosSinPlanillero(orgId),
-      getUsuariosDisponibles(orgId),
-    ]);
-    setTorneos(torneosData);
-    setClubes(clubesRes.data || []);
-    setJugadores(jugadoresRes.data || []);
-    setPartidos(partidosRes.data || []);
-
-    // Transformar usuarios: Supabase devuelve joins como arrays, necesitamos objeto
-    const usuariosTransformados = (usuariosRes.data || []).map((u: { club?: unknown[] }) => ({
-      ...u,
-      club: Array.isArray(u.club) && u.club.length > 0 ? u.club[0] : undefined
-    })) as UsuarioLocal[];
-    setUsuarios(usuariosTransformados);
-
-    setPartidosSinAsignar(sinAsignar);
-
-    // Transformar usuarios disponibles también
-    const disponiblesTransformados = disponibles.map((u: { club?: unknown[] }) => ({
-      ...u,
-      club: Array.isArray(u.club) && u.club.length > 0 ? u.club[0] : undefined
-    })) as UsuarioLocal[];
-    setUsuariosDisponibles(disponiblesTransformados);
-
-    setLoading(false);
-  }, [user?.organizacion_id]);
-
   // Cargar datos cuando el usuario esté listo
   useEffect(() => {
     if (!user) {
@@ -136,14 +97,24 @@ export default function AdminPage() {
     }
     // Siempre recargar datos cuando user cambie
     loadData();
-  }, [user, orgSlug, navigate, loadData]);
+  }, [user, orgSlug]);
 
-  // Auto-refresh cuando vuelve de minimizar o recupera conexión
-  useAutoRefresh(() => {
-    if (user?.organizacion_id) {
-      loadData();
-    }
-  });
+  const loadData = async () => {
+    if (!user?.organizacion_id) return;
+    setLoading(true);
+    const orgId = user.organizacion_id;
+    const [torneosData, clubesRes, jugadoresRes, partidosRes, usuariosRes, sinAsignar, disponibles] = await Promise.all([
+      getTorneos(orgId),
+      supabase.from('equipos').select('*').eq('organizacion_id', orgId).order('nombre'),
+      supabase.from('jugadores').select('*, equipo:equipos(nombre_corto)').eq('organizacion_id', orgId).order('apellido'),
+      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre)').eq('organizacion_id', orgId).order('fecha', { ascending: false }).limit(100),
+      supabase.from('usuarios').select('*, club:equipos(nombre_corto)').eq('organizacion_id', orgId).order('nombre'),
+      getPartidosSinPlanillero(orgId),
+      getUsuariosDisponibles(orgId),
+    ]);
+    setTorneos(torneosData); setClubes(clubesRes.data || []); setJugadores(jugadoresRes.data || []); setPartidos(partidosRes.data || []); setUsuarios(usuariosRes.data || []); setPartidosSinAsignar(sinAsignar); setUsuariosDisponibles(disponibles);
+    setLoading(false);
+  };
 
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
@@ -236,7 +207,7 @@ export default function AdminPage() {
     try {
       const jugadores = await parsearExcelJugadores(file);
       setImportPreview(jugadores);
-    } catch (_err) {
+    } catch (err) {
       alert('Error al leer el archivo');
       setImportPreview([]);
     }
