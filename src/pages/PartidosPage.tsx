@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { reanudarPartido } from '../services/partido.service';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { MarcadorPartido } from '../types';
@@ -41,22 +41,18 @@ export function PartidosPage() {
     }
 
     try {
-      // Usar withRetry para manejar AbortError automáticamente
-      const result = await withRetry(async () => {
-        let query = supabase
-          .from('marcador_partido')
-          .select('*');
+      // Query directa sin withRetry
+      let query = supabase.from('marcador_partido').select('*');
 
-        if (filtro === 'en_curso') {
-          query = query.eq('estado', 'EN_CURSO');
-        } else if (filtro === 'programados') {
-          query = query.eq('estado', 'PROGRAMADO');
-        } else if (filtro === 'finalizados') {
-          query = query.eq('estado', 'FINALIZADO');
-        }
+      if (filtro === 'en_curso') {
+        query = query.eq('estado', 'EN_CURSO');
+      } else if (filtro === 'programados') {
+        query = query.eq('estado', 'PROGRAMADO');
+      } else if (filtro === 'finalizados') {
+        query = query.eq('estado', 'FINALIZADO');
+      }
 
-        return query.limit(50);
-      });
+      const result = await query.limit(50);
 
       if (result.error) {
         setError(result.error.message);

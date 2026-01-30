@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, isSupabaseConfigured, withRetry } from '../services/supabase';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import type { TablaPosicion, Torneo } from '../types';
 
@@ -20,13 +20,11 @@ export function PosicionesPage() {
     }
 
     try {
-      const result = await withRetry(async () => {
-        return await supabase
-          .from('torneos')
-          .select('*')
-          .eq('estado', 'EN_CURSO')
-          .order('nombre');
-      });
+      const result = await supabase
+        .from('torneos')
+        .select('*')
+        .eq('estado', 'EN_CURSO')
+        .order('nombre');
 
       if (result.error) {
         setError(result.error.message);
@@ -49,13 +47,11 @@ export function PosicionesPage() {
     if (!torneoSeleccionado || !configured) return;
 
     try {
-      const result = await withRetry(async () => {
-        return await supabase
-          .from('tabla_posiciones')
-          .select('*')
-          .eq('torneo_id', torneoSeleccionado)
-          .order('posicion');
-      });
+      const result = await supabase
+        .from('tabla_posiciones')
+        .select('*')
+        .eq('torneo_id', torneoSeleccionado)
+        .order('posicion');
 
       if (result.error) {
         setError(result.error.message);
