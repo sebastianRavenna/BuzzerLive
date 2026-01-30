@@ -56,36 +56,43 @@ function App() {
     };
   }, []);
 
-  // === 2. Lógica Global de "Wake Up" (El Watchdog) ===
-  // Esto arregla el problema de "se cuelga al volver" en TODAS las páginas
   useEffect(() => {
     const handleWakeUp = async () => {
       if (document.visibilityState === 'visible') {
-        // A. Verificar si el socket de Realtime está desconectado y reconectar
-        const state = supabase.realtime.connectionState()as string;
+        console.log("👀 App despierta. Verificando estado...");
 
-        console.log(`👀 App despierta. Estado Socket: ${state}`);
-        
-        if (state === 'closed' || state === 'disconnected') {
-          console.log("🔌 Socket desconectado. Reconectando...");
-          supabase.realtime.connect();
+        // A. Verificar Socket (sin cambios, solo logs)
+        const state = supabase.realtime.connectionState() as string; // 'open', 'closed', etc.
+        if (state !== 'open') {
+           console.log(`🔌 Socket no está abierto (${state}). Reconectando...`);
+           supabase.realtime.connect();
         }
 
-        // B. Verificar si la sesión sigue siendo válida (esto refresca el token si hace falta)
-        const { data: { session }, error } = await supabase.auth.getSession();
-
-        if (error || !session) {
-          // Si la sesión murió mientras estaba minimizado
-          if (user) {
-            console.warn("⚠️ Sesión caducada en background. Redirigiendo a login...");
-            // En vez de reload, redirigir a login es más limpio
-            window.location.href = '/login';
+        // B. Verificar sesión BLINDADO contra AbortError
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error || !data.session) {
+             console.warn("⚠️ Sesión inválida al despertar.");
+             if (user) {
+               // Forzamos logout si había un usuario y perdió la sesión
+               window.location.href = '/login';
+             }
+          } else {
+             console.log("✅ Sesión validada correctamente.");
+          }
+        } catch (err: any) {
+          // C. Capturar el AbortError para que no rompa la app
+          if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+             console.log("🛑 Petición cancelada por el navegador (normal al despertar). Ignorando.");
+             // No hacemos nada, es seguro ignorarlo.
+          } else {
+             console.error("❌ Error inesperado al verificar sesión:", err);
           }
         }
       }
     };
 
-    // Escuchar cambios de visibilidad (Tab minimizado -> Tab activo)
     document.addEventListener('visibilitychange', handleWakeUp);
     window.addEventListener('focus', handleWakeUp);
 
@@ -93,7 +100,7 @@ function App() {
       document.removeEventListener('visibilitychange', handleWakeUp);
       window.removeEventListener('focus', handleWakeUp);
     };
-  }, [user]); // Dependemos de 'user' para saber si vale la pena chequear sesión
+  }, [user]);
 
   if (loading) {
     return (
