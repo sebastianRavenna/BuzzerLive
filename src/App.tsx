@@ -68,7 +68,7 @@ function App() {
         console.log('🌍 [GLOBAL] App vuelve a ser visible');
 
         // Si estuvo oculta más de 5 segundos, refrescar automáticamente
-        if (hiddenTime && Date.now() - hiddenTime > 5000) {
+        if (hiddenTime && Date.now() - hiddenTime > 1) {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
           console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Refrescando para evitar problemas de conexión...`);
 
