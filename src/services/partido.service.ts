@@ -532,6 +532,7 @@ export async function registrarSustitucion(
   cuartoActual: number,
   sustituciones: Array<{ jugadorEntraId: string; jugadorSaleId: string }>
 ) {
+  // 1. Registrar en tabla acciones
   const acciones = sustituciones.map(s => ({
     partido_id: partidoId,
     equipo_id: equipoId,
@@ -554,6 +555,23 @@ export async function registrarSustitucion(
   if (error) {
     console.error('Error registrando sustitución:', error);
     throw error;
+  }
+
+  // 2. Actualizar es_titular en participaciones_partido para persistir cambios
+  for (const s of sustituciones) {
+    // Marcar jugador que sale como NO titular
+    await restDirect('participaciones_partido', {
+      method: 'PATCH',
+      filters: { partido_id: partidoId, jugador_id: s.jugadorSaleId },
+      body: { es_titular: false, updated_at: new Date().toISOString() }
+    });
+
+    // Marcar jugador que entra como titular
+    await restDirect('participaciones_partido', {
+      method: 'PATCH',
+      filters: { partido_id: partidoId, jugador_id: s.jugadorEntraId },
+      body: { es_titular: true, updated_at: new Date().toISOString() }
+    });
   }
 }
 

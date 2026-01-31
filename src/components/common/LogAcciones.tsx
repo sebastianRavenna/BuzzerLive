@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
 
 // Tipos para las relaciones de Supabase
@@ -40,6 +40,9 @@ interface LogAccionesProps {
 export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [acciones, setAcciones] = useState<AccionLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usePolling, setUsePolling] = useState(false);
+  const pollingIntervalRef = useRef<number | null>(null);
+  const minimizedTimeRef = useRef<number>(0);
 
   // Helper para extraer datos de relaciones de Supabase
   const getEquipoNombre = (equipo: unknown): string => {
@@ -60,6 +63,25 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     return (jugador as JugadorRelacion)?.apellido || null;
   };
 
+  // Detectar minimización y activar polling
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        minimizedTimeRef.current = Date.now();
+      } else {
+        const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
+        if (timeMinimized > 5) {
+          console.log(`📊 [LogAcciones] Activando polling - estuvo minimizada ${timeMinimized.toFixed(0)}s`);
+          setUsePolling(true);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Cargar acciones inicialmente
   useEffect(() => {
     async function cargarAcciones() {
       const { data, error } = await supabase
@@ -104,7 +126,64 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     cargarAcciones();
   }, [partidoId]);
 
+  // Polling cuando se detecta minimización
   useEffect(() => {
+    if (!usePolling) return;
+
+    console.log('🔄 [LogAcciones] Iniciando polling cada 3s');
+
+    const poll = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('acciones')
+          .select(`
+            id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
+            puntos_local, puntos_visitante, anulada,
+            equipo:equipos(nombre_corto),
+            jugador:jugador_id(numero_camiseta, apellido),
+            jugador_entra:jugador_entra_id(numero_camiseta, apellido),
+            jugador_sale:jugador_sale_id(numero_camiseta, apellido)
+          `)
+          .eq('partido_id', partidoId)
+          .order('timestamp_local', { ascending: false });
+
+        if (!error && data) {
+          setAcciones(data.map(a => ({
+            id: a.id, tipo: a.tipo, cuarto: a.cuarto, valor: a.valor,
+            equipo_nombre: getEquipoNombre(a.equipo),
+            jugador_numero: getJugadorNumero(a.jugador),
+            jugador_apellido: getJugadorApellido(a.jugador),
+            timestamp_local: a.timestamp_local,
+            tiros_libres: a.tiros_libres || 0,
+            numero_falta: a.numero_falta || null,
+            puntos_local: a.puntos_local,
+            puntos_visitante: a.puntos_visitante,
+            jugador_entra_numero: getJugadorNumero(a.jugador_entra),
+            jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
+            jugador_sale_numero: getJugadorNumero(a.jugador_sale),
+            jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
+            anulada: a.anulada || false,
+          })));
+        }
+      } catch (err) {
+        console.error('[LogAcciones] Error en polling:', err);
+      }
+    };
+
+    pollingIntervalRef.current = window.setInterval(poll, 3000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [usePolling, partidoId]);
+
+  // Suscripción Realtime (solo si NO estamos en modo polling)
+  useEffect(() => {
+    if (usePolling) return; // Skip Realtime si estamos en polling
+
     const channel = supabase
       .channel(`acciones-log-${partidoId}-${Date.now()}`)
       .on('postgres_changes', {
@@ -157,7 +236,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [partidoId]);
+  }, [partidoId, usePolling]);
 
   const formatTipo = (accion: AccionLog): string => {
     const { tipo, valor, numero_falta, tiros_libres } = accion;
