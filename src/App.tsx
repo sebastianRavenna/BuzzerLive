@@ -19,6 +19,7 @@ import { reconnectSupabase } from './services/supabase';
 function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<Usuario | null>(null);
+  const [reconnectKey, setReconnectKey] = useState(0); // Fuerza re-render de componentes después de reconectar
   const minimizedTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -76,6 +77,9 @@ function App() {
           try {
             await reconnectSupabase();
             console.log('✅ [App] Cliente Supabase reconectado');
+            // Forzar re-fetch de datos en todos los componentes
+            setReconnectKey(k => k + 1);
+            console.log('🔄 [App] Forzando refresh de datos...');
           } catch (err) {
             console.error('❌ [App] Error reconectando Supabase:', err);
           }
@@ -100,7 +104,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      <Routes key={reconnectKey}>
         {/* Rutas de autenticación */}
         <Route path="/login" element={<LoginPage />} />
         

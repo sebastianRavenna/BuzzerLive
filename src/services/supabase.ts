@@ -113,7 +113,7 @@ export async function restDirect<T = any>(
   }
 ): Promise<{ data: T | null; error: any }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout para apps en tiempo real
 
   try {
     const accessToken = getAuthToken();
@@ -218,9 +218,9 @@ export async function callRpcDirect<T = any>(
 ): Promise<{ data: T | null; error: any }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
-    console.log(`⏰ [RPC Direct] Timeout de 10s alcanzado para ${functionName}`);
+    console.log(`⏰ [RPC Direct] Timeout de 2s alcanzado para ${functionName}`);
     controller.abort();
-  }, 10000);
+  }, 2000); // 2s timeout para apps en tiempo real
 
   try {
     console.log(`🎯 [RPC Direct] Llamando ${functionName}`);
@@ -309,36 +309,16 @@ export async function callRpcDirect<T = any>(
 }
 
 /**
- * Reconecta solo el Realtime del cliente actual sin crear un nuevo cliente.
- * Esto evita problemas de múltiples instancias de GoTrueClient y preserva la sesión.
- *
- * IMPORTANTE: Usa restDirect() para el warm-up en lugar del cliente Supabase
- * porque el cliente HTTP puede quedar congelado después de minimizar la app.
+ * Reconecta Supabase después de minimizar la app.
+ * SIEMPRE reinicializa el cliente porque el layer HTTP queda congelado
+ * después de minimizar con un usuario logueado.
  */
 export async function reconnectSupabase(): Promise<void> {
   console.log('🔄 Reconectando Supabase después de minimizar...');
 
   try {
-    // 1. Verificar estado de Realtime
-    const realtimeState = _supabaseClient.realtime.connectionState();
-    console.log('🔌 Estado Realtime antes:', realtimeState);
-
-    // 2. Si está cerrado, reconectar
-    if (realtimeState !== 'open') {
-      console.log('🔌 Reconectando Realtime...');
-      _supabaseClient.realtime.connect();
-
-      // Esperar un poco para que se conecte
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const newState = _supabaseClient.realtime.connectionState();
-      console.log('🔌 Estado Realtime después:', newState);
-    }
-
-    // 3. Hacer una query de warm-up usando restDirect() en lugar del cliente
-    // El cliente Supabase puede quedar congelado después de minimizar,
-    // pero restDirect() usa fetch() nativo que siempre funciona
-    console.log('💓 Haciendo query de warm-up con restDirect()...');
+    // 1. Verificar conectividad con restDirect (usa fetch nativo, no se congela)
+    console.log('💓 Verificando conectividad con restDirect()...');
     const { error } = await restDirect('partidos', {
       method: 'GET',
       select: 'id',
@@ -346,30 +326,30 @@ export async function reconnectSupabase(): Promise<void> {
     });
 
     if (error) {
-      console.warn('⚠️ Query de warm-up falló:', error.message);
-
-      // Si el warm-up falla, intentar reinicializar el cliente
-      console.log('🔄 Intentando reinicializar cliente Supabase...');
-      reinitializeSupabaseClient();
-      console.log('✅ Cliente reinicializado');
+      console.warn('⚠️ Sin conectividad:', error.message);
     } else {
-      console.log('✅ Query de warm-up exitosa');
+      console.log('✅ Conectividad OK');
     }
+
+    // 2. SIEMPRE reinicializar el cliente Supabase
+    // El layer HTTP del cliente queda congelado después de minimize,
+    // aunque restDirect funcione (porque usa fetch nativo)
+    console.log('🔄 Reinicializando cliente Supabase...');
+    reinitializeSupabaseClient();
+    console.log('✅ Cliente reinicializado');
 
     console.log('✅ Reconexión completada');
   } catch (err) {
     console.error('❌ Error en reconnectSupabase:', err);
 
-    // Último recurso: reinicializar el cliente
+    // Último recurso: reinicializar el cliente de todas formas
     try {
-      console.log('🔄 Reinicializando cliente como último recurso...');
+      console.log('🔄 Reinicializando cliente como fallback...');
       reinitializeSupabaseClient();
-      console.log('✅ Cliente reinicializado como fallback');
+      console.log('✅ Cliente reinicializado');
     } catch (reinitErr) {
       console.error('❌ Error reinicializando cliente:', reinitErr);
     }
-
-    throw err;
   }
 }
 
