@@ -4,6 +4,8 @@ export function UpdatePrompt() {
   const [showUpdate, setShowUpdate] = useState(false);
 
   useEffect(() => {
+    let updateCheckInterval: number | null = null;
+
     // Escuchar mensajes del Service Worker
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'SW_UPDATED') {
@@ -17,7 +19,7 @@ export function UpdatePrompt() {
     const detectUpdate = async () => {
       if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.ready;
-        
+
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
@@ -31,7 +33,7 @@ export function UpdatePrompt() {
         });
 
         // Chequear actualizaciones cada 5 minutos
-        setInterval(() => {
+        updateCheckInterval = window.setInterval(() => {
           registration.update();
         }, 5 * 60 * 1000);
       }
@@ -41,6 +43,9 @@ export function UpdatePrompt() {
 
     return () => {
       navigator.serviceWorker?.removeEventListener('message', handleMessage);
+      if (updateCheckInterval !== null) {
+        clearInterval(updateCheckInterval);
+      }
     };
   }, []);
 

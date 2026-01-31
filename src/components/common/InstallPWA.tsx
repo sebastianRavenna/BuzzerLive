@@ -29,16 +29,17 @@ export function InstallPWA() {
       setShowInstall(true);
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-
-    // Detectar cuando se instala
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       setShowInstall(false);
       setDeferredPrompt(null);
-    });
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 

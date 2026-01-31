@@ -136,7 +136,7 @@ export function PosicionesPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-md p-4 overflow-hidden p-0">
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">

@@ -9,6 +9,11 @@ import type {
 
 // Obtener datos completos de un partido
 export async function getPartidoCompleto(partidoId: string) {
+  // Validación de entrada
+  if (!partidoId || typeof partidoId !== 'string') {
+    throw new Error('partidoId es requerido y debe ser un string válido');
+  }
+
   console.log('📥 getPartidoCompleto() INICIO - Partido ID:', partidoId);
   console.log('⏱️ Timestamp:', new Date().toISOString());
 
@@ -155,12 +160,12 @@ export async function iniciarPartido(partidoId: string) {
   const partido = await getPartidoCompleto(partidoId);
   
   const participaciones = [
-    ...partido.jugadoresLocal.map((j: any) => ({
+    ...partido.jugadoresLocal.map((j: Jugador) => ({
       partido_id: partidoId,
       jugador_id: j.id,
       equipo_id: partido.equipoLocal.id,
     })),
-    ...partido.jugadoresVisitante.map((j: any) => ({
+    ...partido.jugadoresVisitante.map((j: Jugador) => ({
       partido_id: partidoId,
       jugador_id: j.id,
       equipo_id: partido.equipoVisitante.id,
@@ -190,6 +195,20 @@ export async function registrarAccion(
   puntosLocal: number | null = null,
   puntosVisitante: number | null = null
 ) {
+  // Validaciones de entrada
+  if (!partidoId || typeof partidoId !== 'string') {
+    throw new Error('partidoId es requerido y debe ser un string válido');
+  }
+  if (!equipoId || typeof equipoId !== 'string') {
+    throw new Error('equipoId es requerido y debe ser un string válido');
+  }
+  if (!tipo) {
+    throw new Error('tipo de acción es requerido');
+  }
+  if (cuarto < 1 || cuarto > 10) {
+    throw new Error('cuarto debe estar entre 1 y 10');
+  }
+
   // Si es descuento, usamos una lógica diferente (actualización directa)
   if (esDescuento) {
     return await descontarAccion(partidoId, equipoId, jugadorId, tipo, cuarto);

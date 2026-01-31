@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePartidoStore } from '../../store/partidoStore';
 import { getCurrentUser, logout } from '../../services/auth.service';
@@ -7,6 +8,7 @@ export function Layout() {
   const navigate = useNavigate();
   const connectionStatus = usePartidoStore((state) => state.connectionStatus);
   const user = getCurrentUser();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Don't show header on live scoring page (fullscreen)
   const isLivePage = location.pathname.includes('/live');
@@ -74,12 +76,60 @@ export function Layout() {
               </nav>
               
               {/* Mobile menu button */}
-              <button className="md:hidden p-2">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+              <button
+                className="md:hidden p-2"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              >
+                {mobileMenuOpen ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
               </button>
             </div>
+
+            {/* Mobile menu */}
+            {mobileMenuOpen && (
+              <nav className="md:hidden py-4 border-t border-blue-800">
+                <div className="flex flex-col gap-2">
+                  <MobileNavLink to="/" onClick={() => setMobileMenuOpen(false)}>
+                    Inicio
+                  </MobileNavLink>
+                  {!user && (
+                    <MobileNavLink to="/login" onClick={() => setMobileMenuOpen(false)}>
+                      Iniciar Sesión
+                    </MobileNavLink>
+                  )}
+                  {user && (
+                    <>
+                      <button
+                        onClick={() => {
+                          handlePanelClick();
+                          setMobileMenuOpen(false);
+                        }}
+                        className="px-3 py-2 text-left text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white rounded-md"
+                      >
+                        Ir a Mi Panel
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setMobileMenuOpen(false);
+                        }}
+                        className="px-3 py-2 text-left text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white rounded-md"
+                      >
+                        Cerrar Sesión
+                      </button>
+                    </>
+                  )}
+                </div>
+              </nav>
+            )}
           </div>
         </header>
       )}
@@ -105,14 +155,36 @@ export function Layout() {
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
   const isActive = location.pathname === to;
-  
+
   return (
     <Link
       to={to}
       className={`
         px-3 py-2 rounded-md text-sm font-medium transition-colors
-        ${isActive 
-          ? 'bg-blue-800 text-white' 
+        ${isActive
+          ? 'bg-blue-800 text-white'
+          : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+        }
+      `}
+    >
+      {children}
+    </Link>
+  );
+}
+
+// Mobile nav link component
+function MobileNavLink({ to, children, onClick }: { to: string; children: React.ReactNode; onClick?: () => void }) {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className={`
+        px-3 py-2 rounded-md text-sm font-medium transition-colors block
+        ${isActive
+          ? 'bg-blue-800 text-white'
           : 'text-blue-100 hover:bg-blue-800 hover:text-white'
         }
       `}
