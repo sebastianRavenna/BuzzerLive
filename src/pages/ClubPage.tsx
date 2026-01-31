@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
-import { supabase } from '../services/supabase';
+import { supabase, restDirect } from '../services/supabase';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
 
@@ -184,21 +184,32 @@ export default function ClubPage() {
       peso: jugadorForm.peso ? parseFloat(jugadorForm.peso) : null,
       certificado_medico_vencimiento: jugadorForm.certificado_medico_vencimiento || null,
     };
-    
+
     if (editingJugador) {
-      const { error } = await supabase.from('jugadores').update(data).eq('id', editingJugador.id);
+      const { error } = await restDirect('jugadores', {
+        method: 'PATCH',
+        filters: { id: editingJugador.id },
+        body: data
+      });
       if (error) { setError(error.message); return; }
     } else {
-      const { error } = await supabase.from('jugadores').insert({ ...data, equipo_id: user.club_id, organizacion_id: user.organizacion_id, activo: true });
+      const { error } = await restDirect('jugadores', {
+        method: 'POST',
+        body: { ...data, equipo_id: user.club_id, organizacion_id: user.organizacion_id, activo: true }
+      });
       if (error) { setError(error.message); return; }
     }
-    
+
     setShowJugadorModal(false);
     loadData();
   };
 
   const handleToggleJugador = async (j: Jugador) => {
-    await supabase.from('jugadores').update({ activo: !j.activo }).eq('id', j.id);
+    await restDirect('jugadores', {
+      method: 'PATCH',
+      filters: { id: j.id },
+      body: { activo: !j.activo }
+    });
     loadData();
   };
 
@@ -240,10 +251,17 @@ export default function ClubPage() {
     };
     
     if (editingEntrenador) {
-      const { error } = await supabase.from('entrenadores').update(data).eq('id', editingEntrenador.id);
+      const { error } = await restDirect('entrenadores', {
+        method: 'PATCH',
+        filters: { id: editingEntrenador.id },
+        body: data
+      });
       if (error) { setError(error.message); return; }
     } else {
-      const { error } = await supabase.from('entrenadores').insert({ ...data, equipo_id: user.club_id, organizacion_id: user.organizacion_id, activo: true });
+      const { error } = await restDirect('entrenadores', {
+        method: 'POST',
+        body: { ...data, equipo_id: user.club_id, organizacion_id: user.organizacion_id, activo: true }
+      });
       if (error) { setError(error.message); return; }
     }
     
@@ -268,7 +286,11 @@ export default function ClubPage() {
   const handleSaveClub = async () => {
     if (!club) return;
     setError(null);
-    const { error } = await supabase.from('equipos').update(clubForm).eq('id', club.id);
+    const { error } = await restDirect('equipos', {
+      method: 'PATCH',
+      filters: { id: club.id },
+      body: clubForm
+    });
     if (error) { setError(error.message); return; }
     setShowClubModal(false);
     loadData();

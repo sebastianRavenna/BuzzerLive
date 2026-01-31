@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { supabase, restDirect } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -950,8 +950,16 @@ export function PartidoLivePage() {
       
       // Si hay que resetear tiempos, actualizar en BD también (sin registrar en log)
       if (resetearTiempos) {
-        const { error: e1 } = await supabase.from('partidos').update({ tiempos_muertos_local: 0 }).eq('id', id);
-        const { error: e2 } = await supabase.from('partidos').update({ tiempos_muertos_visitante: 0 }).eq('id', id);
+        const { error: e1 } = await restDirect('partidos', {
+          method: 'PATCH',
+          filters: { id: id },
+          body: { tiempos_muertos_local: 0 }
+        });
+        const { error: e2 } = await restDirect('partidos', {
+          method: 'PATCH',
+          filters: { id: id },
+          body: { tiempos_muertos_visitante: 0 }
+        });
         if (e1 || e2) console.error('Error reseteando tiempos:', e1 || e2);
       }
       
