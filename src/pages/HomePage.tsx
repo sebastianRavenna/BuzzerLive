@@ -23,9 +23,6 @@ export function HomePage() {
 
     async function fetchData() {
       try {
-        // Pequeño delay para asegurar que Supabase esté completamente inicializado
-        await new Promise(resolve => setTimeout(resolve, 100));
-
         if (!isMounted) return;
 
         const { data: enVivo, error: errorEnVivo } = await supabase

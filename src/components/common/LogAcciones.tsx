@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../services/supabase';
 
 // Tipos para las relaciones de Supabase
@@ -31,11 +31,79 @@ interface AccionLog {
   anulada: boolean;
 }
 
+// Tipo para los datos raw de Supabase
+interface AccionRaw {
+  id: string;
+  tipo: string;
+  cuarto: number;
+  valor: number;
+  timestamp_local: string;
+  tiros_libres: number | null;
+  numero_falta: number | null;
+  puntos_local: number | null;
+  puntos_visitante: number | null;
+  anulada: boolean | null;
+  equipo: unknown;
+  jugador: unknown;
+  jugador_entra: unknown;
+  jugador_sale: unknown;
+}
+
 interface LogAccionesProps {
   partidoId: string;
   equipoLocalId?: string;
   compact?: boolean;
 }
+
+// Query de acciones reutilizable
+const ACCIONES_SELECT = `
+  id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
+  puntos_local, puntos_visitante, anulada,
+  equipo:equipos(nombre_corto),
+  jugador:jugador_id(numero_camiseta, apellido),
+  jugador_entra:jugador_entra_id(numero_camiseta, apellido),
+  jugador_sale:jugador_sale_id(numero_camiseta, apellido)
+`;
+
+// Helper para extraer datos de relaciones de Supabase
+const getEquipoNombre = (equipo: unknown): string => {
+  if (!equipo) return 'Equipo';
+  if (Array.isArray(equipo) && equipo.length > 0) return equipo[0]?.nombre_corto || 'Equipo';
+  return (equipo as EquipoRelacion)?.nombre_corto || 'Equipo';
+};
+
+const getJugadorNumero = (jugador: unknown): number | null => {
+  if (!jugador) return null;
+  if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.numero_camiseta || null;
+  return (jugador as JugadorRelacion)?.numero_camiseta || null;
+};
+
+const getJugadorApellido = (jugador: unknown): string | null => {
+  if (!jugador) return null;
+  if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.apellido || null;
+  return (jugador as JugadorRelacion)?.apellido || null;
+};
+
+// Función para mapear datos raw a AccionLog
+const mapAccionRawToLog = (a: AccionRaw): AccionLog => ({
+  id: a.id,
+  tipo: a.tipo,
+  cuarto: a.cuarto,
+  valor: a.valor,
+  equipo_nombre: getEquipoNombre(a.equipo),
+  jugador_numero: getJugadorNumero(a.jugador),
+  jugador_apellido: getJugadorApellido(a.jugador),
+  timestamp_local: a.timestamp_local,
+  tiros_libres: a.tiros_libres || 0,
+  numero_falta: a.numero_falta || null,
+  puntos_local: a.puntos_local,
+  puntos_visitante: a.puntos_visitante,
+  jugador_entra_numero: getJugadorNumero(a.jugador_entra),
+  jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
+  jugador_sale_numero: getJugadorNumero(a.jugador_sale),
+  jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
+  anulada: a.anulada || false,
+});
 
 export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [acciones, setAcciones] = useState<AccionLog[]>([]);
@@ -43,25 +111,6 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
   const [usePolling, setUsePolling] = useState(false);
   const pollingIntervalRef = useRef<number | null>(null);
   const minimizedTimeRef = useRef<number>(0);
-
-  // Helper para extraer datos de relaciones de Supabase
-  const getEquipoNombre = (equipo: unknown): string => {
-    if (!equipo) return 'Equipo';
-    if (Array.isArray(equipo) && equipo.length > 0) return equipo[0]?.nombre_corto || 'Equipo';
-    return (equipo as EquipoRelacion)?.nombre_corto || 'Equipo';
-  };
-
-  const getJugadorNumero = (jugador: unknown): number | null => {
-    if (!jugador) return null;
-    if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.numero_camiseta || null;
-    return (jugador as JugadorRelacion)?.numero_camiseta || null;
-  };
-
-  const getJugadorApellido = (jugador: unknown): string | null => {
-    if (!jugador) return null;
-    if (Array.isArray(jugador) && jugador.length > 0) return jugador[0]?.apellido || null;
-    return (jugador as JugadorRelacion)?.apellido || null;
-  };
 
   // Detectar minimización y activar polling
   useEffect(() => {
@@ -81,50 +130,40 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
+  // Función compartida para cargar acciones
+  const fetchAcciones = useCallback(async (): Promise<AccionLog[]> => {
+    const { data, error } = await supabase
+      .from('acciones')
+      .select(ACCIONES_SELECT)
+      .eq('partido_id', partidoId)
+      .order('timestamp_local', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando acciones:', error);
+      return [];
+    }
+
+    return (data as AccionRaw[])?.map(mapAccionRawToLog) || [];
+  }, [partidoId]);
+
   // Cargar acciones inicialmente
   useEffect(() => {
+    let isMounted = true;
+
     async function cargarAcciones() {
-      const { data, error } = await supabase
-        .from('acciones')
-        .select(`
-          id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
-          puntos_local, puntos_visitante, anulada,
-          equipo:equipos(nombre_corto),
-          jugador:jugador_id(numero_camiseta, apellido),
-          jugador_entra:jugador_entra_id(numero_camiseta, apellido),
-          jugador_sale:jugador_sale_id(numero_camiseta, apellido)
-        `)
-        .eq('partido_id', partidoId)
-        .order('timestamp_local', { ascending: false });
-
-      if (error) {
-        console.error('Error cargando acciones:', error);
+      const acciones = await fetchAcciones();
+      if (isMounted) {
+        setAcciones(acciones);
         setLoading(false);
-        return;
       }
-
-      if (data) {
-        setAcciones(data.map(a => ({
-          id: a.id, tipo: a.tipo, cuarto: a.cuarto, valor: a.valor,
-          equipo_nombre: getEquipoNombre(a.equipo),
-          jugador_numero: getJugadorNumero(a.jugador),
-          jugador_apellido: getJugadorApellido(a.jugador),
-          timestamp_local: a.timestamp_local,
-          tiros_libres: a.tiros_libres || 0,
-          numero_falta: a.numero_falta || null,
-          puntos_local: a.puntos_local,
-          puntos_visitante: a.puntos_visitante,
-          jugador_entra_numero: getJugadorNumero(a.jugador_entra),
-          jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
-          jugador_sale_numero: getJugadorNumero(a.jugador_sale),
-          jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
-          anulada: a.anulada || false,
-        })));
-      }
-      setLoading(false);
     }
+
     cargarAcciones();
-  }, [partidoId]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchAcciones]);
 
   // Polling cuando se detecta minimización
   useEffect(() => {
@@ -134,42 +173,15 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
 
     const poll = async () => {
       try {
-        const { data, error } = await supabase
-          .from('acciones')
-          .select(`
-            id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
-            puntos_local, puntos_visitante, anulada,
-            equipo:equipos(nombre_corto),
-            jugador:jugador_id(numero_camiseta, apellido),
-            jugador_entra:jugador_entra_id(numero_camiseta, apellido),
-            jugador_sale:jugador_sale_id(numero_camiseta, apellido)
-          `)
-          .eq('partido_id', partidoId)
-          .order('timestamp_local', { ascending: false });
-
-        if (!error && data) {
-          setAcciones(data.map(a => ({
-            id: a.id, tipo: a.tipo, cuarto: a.cuarto, valor: a.valor,
-            equipo_nombre: getEquipoNombre(a.equipo),
-            jugador_numero: getJugadorNumero(a.jugador),
-            jugador_apellido: getJugadorApellido(a.jugador),
-            timestamp_local: a.timestamp_local,
-            tiros_libres: a.tiros_libres || 0,
-            numero_falta: a.numero_falta || null,
-            puntos_local: a.puntos_local,
-            puntos_visitante: a.puntos_visitante,
-            jugador_entra_numero: getJugadorNumero(a.jugador_entra),
-            jugador_entra_apellido: getJugadorApellido(a.jugador_entra),
-            jugador_sale_numero: getJugadorNumero(a.jugador_sale),
-            jugador_sale_apellido: getJugadorApellido(a.jugador_sale),
-            anulada: a.anulada || false,
-          })));
-        }
+        const nuevasAcciones = await fetchAcciones();
+        setAcciones(nuevasAcciones);
       } catch (err) {
         console.error('[LogAcciones] Error en polling:', err);
       }
     };
 
+    // Ejecutar inmediatamente y luego cada 3s
+    poll();
     pollingIntervalRef.current = window.setInterval(poll, 3000);
 
     return () => {
@@ -178,7 +190,7 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
         pollingIntervalRef.current = null;
       }
     };
-  }, [usePolling, partidoId]);
+  }, [usePolling, fetchAcciones]);
 
   // Suscripción Realtime (solo si NO estamos en modo polling)
   useEffect(() => {
@@ -192,34 +204,13 @@ export function LogAcciones({ partidoId, compact = false }: LogAccionesProps) {
       }, async (payload) => {
         const { data } = await supabase
           .from('acciones')
-          .select(`
-            id, tipo, cuarto, valor, timestamp_local, tiros_libres, numero_falta,
-            puntos_local, puntos_visitante, anulada,
-            equipo:equipos(nombre_corto),
-            jugador:jugador_id(numero_camiseta, apellido),
-            jugador_entra:jugador_entra_id(numero_camiseta, apellido),
-            jugador_sale:jugador_sale_id(numero_camiseta, apellido)
-          `)
+          .select(ACCIONES_SELECT)
           .eq('id', payload.new.id)
           .single();
 
         if (data) {
-          setAcciones(prev => [{
-            id: data.id, tipo: data.tipo, cuarto: data.cuarto, valor: data.valor,
-            equipo_nombre: getEquipoNombre(data.equipo),
-            jugador_numero: getJugadorNumero(data.jugador),
-            jugador_apellido: getJugadorApellido(data.jugador),
-            timestamp_local: data.timestamp_local,
-            tiros_libres: data.tiros_libres || 0,
-            numero_falta: data.numero_falta || null,
-            puntos_local: data.puntos_local,
-            puntos_visitante: data.puntos_visitante,
-            jugador_entra_numero: getJugadorNumero(data.jugador_entra),
-            jugador_entra_apellido: getJugadorApellido(data.jugador_entra),
-            jugador_sale_numero: getJugadorNumero(data.jugador_sale),
-            jugador_sale_apellido: getJugadorApellido(data.jugador_sale),
-            anulada: data.anulada || false,
-          }, ...prev]);
+          const nuevaAccion = mapAccionRawToLog(data as AccionRaw);
+          setAcciones(prev => [nuevaAccion, ...prev]);
         }
       })
       .on('postgres_changes', {
