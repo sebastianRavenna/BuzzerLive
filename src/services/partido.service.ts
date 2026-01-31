@@ -1,4 +1,4 @@
-import { supabase, callRpcDirect } from './supabase';
+import { supabase, callRpcDirect, restDirect } from './supabase';
 import type { 
   Partido, 
   Equipo, 
@@ -167,7 +167,10 @@ export async function iniciarPartido(partidoId: string) {
     })),
   ];
 
-  await supabase.from('participaciones_partido').upsert(participaciones, {
+  await restDirect('participaciones_partido', {
+    method: 'POST',
+    body: participaciones,
+    upsert: true,
     onConflict: 'partido_id,jugador_id'
   });
 
@@ -226,12 +229,13 @@ async function descontarAccion(
   cuarto: number
 ) {
   // Obtener partido actual
-  const { data: partido, error: errorPartido } = await supabase
-    .from('partidos')
-    .select('*')
-    .eq('id', partidoId)
-    .single();
-  
+  const { data: partido, error: errorPartido } = await restDirect('partidos', {
+    method: 'GET',
+    filters: { id: partidoId },
+    select: '*',
+    single: true
+  });
+
   if (errorPartido) throw errorPartido;
   
   const esLocal = equipoId === partido.equipo_local_id;
@@ -263,22 +267,23 @@ async function descontarAccion(
     updates[faltasKey] = faltasActuales;
   }
   
-  const { error: errorUpdate } = await supabase
-    .from('partidos')
-    .update(updates)
-    .eq('id', partidoId);
-  
+  const { error: errorUpdate } = await restDirect('partidos', {
+    method: 'PATCH',
+    filters: { id: partidoId },
+    body: updates
+  });
+
   if (errorUpdate) throw errorUpdate;
   
   // Actualizar participación del jugador si aplica (solo para puntos y falta personal)
   if (jugadorId && (valorPunto > 0 || tipo === 'FALTA_PERSONAL')) {
-    const { data: participacion } = await supabase
-      .from('participaciones_partido')
-      .select('*')
-      .eq('partido_id', partidoId)
-      .eq('jugador_id', jugadorId)
-      .single();
-    
+    const { data: participacion } = await restDirect('participaciones_partido', {
+      method: 'GET',
+      filters: { partido_id: partidoId, jugador_id: jugadorId },
+      select: '*',
+      single: true
+    });
+
     if (participacion) {
       const updatesPart: Record<string, unknown> = {};
       if (valorPunto > 0) {
@@ -287,34 +292,39 @@ async function descontarAccion(
       if (tipo === 'FALTA_PERSONAL') {
         updatesPart.faltas = Math.max(0, participacion.faltas - 1);
       }
-      
-      await supabase
-        .from('participaciones_partido')
-        .update(updatesPart)
-        .eq('id', participacion.id);
+
+      await restDirect('participaciones_partido', {
+        method: 'PATCH',
+        filters: { id: participacion.id },
+        body: updatesPart
+      });
     }
   }
   
   // Buscar la última acción no anulada del jugador con el mismo tipo y marcarla como anulada
-  const { data: acciones, error: errorBusqueda } = await supabase
-    .from('acciones')
-    .select('*')
-    .eq('partido_id', partidoId)
-    .eq('equipo_id', equipoId)
-    .eq('jugador_id', jugadorId)
-    .eq('tipo', tipo)
-    .eq('anulada', false)
-    .order('timestamp_local', { ascending: false })
-    .limit(1);
+  const { data: acciones, error: errorBusqueda } = await restDirect<any[]>('acciones', {
+    method: 'GET',
+    filters: {
+      partido_id: partidoId,
+      equipo_id: equipoId,
+      jugador_id: jugadorId,
+      tipo: tipo,
+      anulada: false
+    },
+    select: '*',
+    order: { column: 'timestamp_local', ascending: false },
+    limit: 1
+  });
 
   if (errorBusqueda) throw errorBusqueda;
 
   // Si encontramos una acción, marcarla como anulada
   if (acciones && acciones.length > 0) {
-    const { error: errorAnular } = await supabase
-      .from('acciones')
-      .update({ anulada: true })
-      .eq('id', acciones[0].id);
+    const { error: errorAnular } = await restDirect('acciones', {
+      method: 'PATCH',
+      filters: { id: acciones[0].id },
+      body: { anulada: true }
+    });
 
     if (errorAnular) {
       console.error('Error anulando acción:', errorAnular);
@@ -337,43 +347,45 @@ export async function anularUltimaAccion(partidoId: string) {
 
 // Cambiar cuarto
 export async function cambiarCuarto(partidoId: string, nuevoCuarto: number) {
-  const { error } = await supabase
-    .from('partidos')
-    .update({ 
+  const { error } = await restDirect('partidos', {
+    method: 'PATCH',
+    filters: { id: partidoId },
+    body: {
       cuarto_actual: nuevoCuarto,
       updated_at: new Date().toISOString()
-    })
-    .eq('id', partidoId);
+    }
+  });
 
   if (error) throw error;
 }
 
 // Actualizar tiempos muertos y registrar en log
 export async function actualizarTiemposMuertos(
-  partidoId: string, 
-  esLocal: boolean, 
+  partidoId: string,
+  esLocal: boolean,
   nuevoValor: number,
   equipoId: string,
   cuartoActual: number,
   esDescuento: boolean = false
 ) {
   const campo = esLocal ? 'tiempos_muertos_local' : 'tiempos_muertos_visitante';
-  
-  const { error } = await supabase
-    .from('partidos')
-    .update({ 
+
+  const { error } = await restDirect('partidos', {
+    method: 'PATCH',
+    filters: { id: partidoId },
+    body: {
       [campo]: nuevoValor,
       updated_at: new Date().toISOString()
-    })
-    .eq('id', partidoId);
+    }
+  });
 
   if (error) throw error;
 
   // Registrar en el log de acciones (solo si no es descuento)
   if (!esDescuento) {
-    const { error: errorAccion } = await supabase
-      .from('acciones')
-      .insert({
+    const { error: errorAccion } = await restDirect('acciones', {
+      method: 'POST',
+      body: {
         partido_id: partidoId,
         equipo_id: equipoId,
         jugador_id: null,
@@ -383,8 +395,9 @@ export async function actualizarTiemposMuertos(
         timestamp_local: new Date().toISOString(),
         cliente_id: getClienteId(),
         anulada: false,
-      });
-    
+      }
+    });
+
     if (errorAccion) {
       console.error('Error registrando tiempo muerto en log:', errorAccion);
     }
@@ -403,28 +416,30 @@ export async function finalizarPartido(partidoId: string) {
 
 // Suspender partido
 export async function suspenderPartido(partidoId: string, observaciones: string) {
-  const { error } = await supabase
-    .from('partidos')
-    .update({ 
+  const { error } = await restDirect('partidos', {
+    method: 'PATCH',
+    filters: { id: partidoId },
+    body: {
       estado: 'SUSPENDIDO',
       observaciones: observaciones,
       updated_at: new Date().toISOString()
-    })
-    .eq('id', partidoId);
+    }
+  });
 
   if (error) throw error;
 }
 
 // Reanudar partido suspendido
 export async function reanudarPartido(partidoId: string) {
-  const { error } = await supabase
-    .from('partidos')
-    .update({ 
+  const { error } = await restDirect('partidos', {
+    method: 'PATCH',
+    filters: { id: partidoId },
+    body: {
       estado: 'EN_CURSO',
-      observaciones: null, // Limpiar observaciones de suspensión
+      observaciones: null,
       updated_at: new Date().toISOString()
-    })
-    .eq('id', partidoId);
+    }
+  });
 
   if (error) throw error;
 }
@@ -487,22 +502,23 @@ export async function registrarAccionSistema(
   puntosLocal?: number,
   puntosVisitante?: number
 ) {
-  const { error } = await supabase
-    .from('acciones')
-    .insert({
+  const { error } = await restDirect('acciones', {
+    method: 'POST',
+    body: {
       partido_id: partidoId,
-      equipo_id: equipoId, // Usamos equipo local como referencia
+      equipo_id: equipoId,
       jugador_id: null,
       tipo: tipo,
       cuarto: cuarto,
-      valor: cuarto, // Guardamos el número de cuarto en valor
+      valor: cuarto,
       timestamp_local: new Date().toISOString(),
       cliente_id: getClienteId(),
       anulada: false,
       puntos_local: puntosLocal ?? null,
       puntos_visitante: puntosVisitante ?? null,
-    });
-  
+    }
+  });
+
   if (error) {
     console.error('Error registrando acción de sistema:', error);
     throw error;
@@ -530,10 +546,11 @@ export async function registrarSustitucion(
     jugador_sale_id: s.jugadorSaleId,
   }));
 
-  const { error } = await supabase
-    .from('acciones')
-    .insert(acciones);
-  
+  const { error } = await restDirect('acciones', {
+    method: 'POST',
+    body: acciones
+  });
+
   if (error) {
     console.error('Error registrando sustitución:', error);
     throw error;

@@ -68,6 +68,143 @@ export const isSupabaseConfigured = () => {
 };
 
 /**
+ * Obtiene el token de autenticación de localStorage sin usar el cliente congelado.
+ */
+function getAuthToken(): string | undefined {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.includes('auth-token')) {
+        const sessionData = localStorage.getItem(key);
+        if (sessionData) {
+          const parsed = JSON.parse(sessionData);
+          if (parsed?.access_token) {
+            return parsed.access_token;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Error leyendo token de localStorage:', err);
+  }
+  return undefined;
+}
+
+/**
+ * Ejecuta operaciones REST (SELECT, INSERT, UPDATE, DELETE) usando fetch directo.
+ * Bypasea el cliente de Supabase congelado después de minimizar.
+ *
+ * @param table - Nombre de la tabla
+ * @param options - Opciones de la operación
+ * @returns Respuesta de la operación
+ */
+export async function restDirect<T = any>(
+  table: string,
+  options: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    body?: any;
+    filters?: Record<string, any>;
+    select?: string;
+    single?: boolean;
+    order?: { column: string; ascending?: boolean };
+    limit?: number;
+    upsert?: boolean;
+    onConflict?: string;
+  }
+): Promise<{ data: T | null; error: any }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const accessToken = getAuthToken();
+
+    // Construir URL con filtros
+    let url = `${supabaseUrl}/rest/v1/${table}`;
+    const searchParams = new URLSearchParams();
+
+    if (options.select) {
+      searchParams.append('select', options.select);
+    }
+
+    if (options.filters) {
+      for (const [key, value] of Object.entries(options.filters)) {
+        searchParams.append(key, `eq.${value}`);
+      }
+    }
+
+    if (options.order) {
+      const direction = options.order.ascending === false ? 'desc' : 'asc';
+      searchParams.append('order', `${options.order.column}.${direction}`);
+    }
+
+    if (options.limit) {
+      searchParams.append('limit', String(options.limit));
+    }
+
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+
+    // Headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': supabaseAnonKey || '',
+      'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseAnonKey}`,
+    };
+
+    if (options.single) {
+      headers['Accept'] = 'application/vnd.pgrst.object+json';
+    }
+
+    if (options.method === 'POST' || options.method === 'PATCH') {
+      if (options.upsert && options.onConflict) {
+        headers['Prefer'] = `resolution=merge-duplicates,return=representation`;
+      } else {
+        headers['Prefer'] = 'return=representation';
+      }
+    }
+
+    // Ejecutar fetch
+    const response = await fetch(url, {
+      method: options.method,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      keepalive: true,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        data: null,
+        error: {
+          message: errorData.message || `HTTP ${response.status}`,
+          details: errorData.details || response.statusText,
+          code: errorData.code || String(response.status),
+        }
+      };
+    }
+
+    const data = await response.json();
+    return { data, error: null };
+
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    return {
+      data: null,
+      error: {
+        message: err.message || 'Network error',
+        details: err.toString(),
+        code: err.name === 'AbortError' ? 'TIMEOUT' : 'FETCH_ERROR',
+      }
+    };
+  }
+}
+
+/**
  * Llama una función RPC de Supabase usando fetch() nativo en lugar del cliente.
  * Esto bypasea el cliente de Supabase que puede tener problemas después de minimizar.
  *
@@ -89,33 +226,13 @@ export async function callRpcDirect<T = any>(
     console.log(`🎯 [RPC Direct] Llamando ${functionName}`);
     console.log(`📦 [RPC Direct] Parámetros:`, params);
 
-    // 1. Obtener token de auth DIRECTAMENTE de localStorage (sin usar el cliente)
-    // El cliente se congela después de minimizar, así que bypassamos completamente
+    // 1. Obtener token de auth de localStorage
     console.log('🔑 [RPC Direct] Obteniendo token de localStorage...');
-    let accessToken: string | undefined;
+    const accessToken = getAuthToken();
 
-    try {
-      // Supabase guarda la sesión en: sb-{project-ref}-auth-token
-      // Buscar la key que contenga 'auth-token'
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.includes('auth-token')) {
-          const sessionData = localStorage.getItem(key);
-          if (sessionData) {
-            const parsed = JSON.parse(sessionData);
-            accessToken = parsed?.access_token;
-            if (accessToken) {
-              console.log('✅ [RPC Direct] Token obtenido de localStorage');
-              break;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('⚠️ [RPC Direct] Error leyendo localStorage:', err);
-    }
-
-    if (!accessToken) {
+    if (accessToken) {
+      console.log('✅ [RPC Direct] Token obtenido de localStorage');
+    } else {
       console.warn('⚠️ [RPC Direct] Sin token - usando anon key');
     }
 
