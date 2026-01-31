@@ -295,7 +295,7 @@ export function PartidoLivePage() {
   // Funciona incluso offline porque las acciones se guardan localmente primero
   useEffect(() => {
     let hiddenTime: number | null = null;
-    let pollingInterval: NodeJS.Timeout | null = null;
+    let pollingInterval: number | null = null;
 
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
