@@ -89,15 +89,34 @@ export async function callRpcDirect<T = any>(
     console.log(`🎯 [RPC Direct] Llamando ${functionName}`);
     console.log(`📦 [RPC Direct] Parámetros:`, params);
 
-    // 1. Obtener token de auth de la sesión actual
-    console.log('🔑 [RPC Direct] Obteniendo token de auth...');
-    const { data: { session } } = await _supabaseClient.auth.getSession();
-    const accessToken = session?.access_token;
+    // 1. Obtener token de auth DIRECTAMENTE de localStorage (sin usar el cliente)
+    // El cliente se congela después de minimizar, así que bypassamos completamente
+    console.log('🔑 [RPC Direct] Obteniendo token de localStorage...');
+    let accessToken: string | undefined;
+
+    try {
+      // Supabase guarda la sesión en: sb-{project-ref}-auth-token
+      // Buscar la key que contenga 'auth-token'
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.includes('auth-token')) {
+          const sessionData = localStorage.getItem(key);
+          if (sessionData) {
+            const parsed = JSON.parse(sessionData);
+            accessToken = parsed?.access_token;
+            if (accessToken) {
+              console.log('✅ [RPC Direct] Token obtenido de localStorage');
+              break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [RPC Direct] Error leyendo localStorage:', err);
+    }
 
     if (!accessToken) {
-      console.warn('⚠️ [RPC Direct] Sin token de auth - usando anon key');
-    } else {
-      console.log('✅ [RPC Direct] Token de auth obtenido');
+      console.warn('⚠️ [RPC Direct] Sin token - usando anon key');
     }
 
     // 2. Construir URL del endpoint RPC
@@ -116,7 +135,7 @@ export async function callRpcDirect<T = any>(
       },
       body: JSON.stringify(params),
       keepalive: true,
-      signal: controller.signal, // ⭐ Timeout control
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
