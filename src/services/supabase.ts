@@ -15,6 +15,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 console.log('🚀 Inicializando cliente Supabase...');
 console.log('📍 URL:', supabaseUrl);
 
+// Custom fetch with keepalive to prevent connection drops when app is backgrounded
+const customFetch: typeof fetch = (input, init) => {
+  return fetch(input, {
+    ...init,
+    keepalive: true, // Keep connection alive even when tab is backgrounded
+    signal: init?.signal, // Preserve abort signal if provided
+  });
+};
+
 // Create initial Supabase client
 let _supabaseClient = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
@@ -28,6 +37,9 @@ let _supabaseClient = createClient(
       params: {
         eventsPerSecond: 10,
       },
+    },
+    global: {
+      fetch: customFetch,
     },
   }
 );
@@ -134,6 +146,40 @@ export async function testSupabaseConnection(timeoutMs: number = 5000): Promise<
     return authOk || queryOk; // Al menos una debe funcionar
   } catch (err) {
     console.error('❌ Conexión HTTP FALLO:', err);
+    return false;
+  }
+}
+
+/**
+ * Hace un warm-up del endpoint de RPC después de reconectar.
+ * Los endpoints RPC de Supabase pueden necesitar una primera llamada para "despertarse"
+ * después de que la app estuvo en background.
+ */
+export async function warmupRpcConnection(): Promise<boolean> {
+  console.log('🔥 Haciendo warm-up de conexión RPC...');
+
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        console.log('⏰ Warm-up RPC timeout');
+        reject(new Error('RPC warmup timeout'));
+      }, 5000);
+    });
+
+    // Hacer una query simple usando select para warm-up
+    // No usamos RPC directamente porque no tenemos una función dummy
+    const warmupPromise = _supabaseClient
+      .from('partidos')
+      .select('id, estado')
+      .limit(1)
+      .single();
+
+    await Promise.race([warmupPromise, timeoutPromise]);
+
+    console.log('✅ Warm-up RPC completado');
+    return true;
+  } catch (err) {
+    console.warn('⚠️ Warm-up RPC falló (no crítico):', err);
     return false;
   }
 }

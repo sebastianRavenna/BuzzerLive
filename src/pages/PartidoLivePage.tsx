@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, testSupabaseConnection, reinitializeSupabaseClient } from '../services/supabase';
+import { supabase, testSupabaseConnection, reinitializeSupabaseClient, warmupRpcConnection } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -358,6 +358,10 @@ export function PartidoLivePage() {
           console.error('❌ Error recargando datos:', err);
         }
       }
+
+      // 6. Warm-up de conexión RPC para prevenir timeouts en primera llamada
+      console.log('🔥 Haciendo warm-up de RPC...');
+      await warmupRpcConnection();
 
       console.log('═══════════════════════════════════════════════');
       console.log('✅ handleVisibilityChange COMPLETADO');
