@@ -311,6 +311,9 @@ export async function callRpcDirect<T = any>(
 /**
  * Reconecta solo el Realtime del cliente actual sin crear un nuevo cliente.
  * Esto evita problemas de múltiples instancias de GoTrueClient y preserva la sesión.
+ *
+ * IMPORTANTE: Usa restDirect() para el warm-up en lugar del cliente Supabase
+ * porque el cliente HTTP puede quedar congelado después de minimizar la app.
  */
 export async function reconnectSupabase(): Promise<void> {
   console.log('🔄 Reconectando Supabase después de minimizar...');
@@ -332,15 +335,23 @@ export async function reconnectSupabase(): Promise<void> {
       console.log('🔌 Estado Realtime después:', newState);
     }
 
-    // 3. Hacer una query simple para "despertar" la conexión HTTP/RPC
-    console.log('💓 Haciendo query de warm-up...');
-    const { error } = await _supabaseClient
-      .from('partidos')
-      .select('id')
-      .limit(1);
+    // 3. Hacer una query de warm-up usando restDirect() en lugar del cliente
+    // El cliente Supabase puede quedar congelado después de minimizar,
+    // pero restDirect() usa fetch() nativo que siempre funciona
+    console.log('💓 Haciendo query de warm-up con restDirect()...');
+    const { error } = await restDirect('partidos', {
+      method: 'GET',
+      select: 'id',
+      limit: 1,
+    });
 
     if (error) {
       console.warn('⚠️ Query de warm-up falló:', error.message);
+
+      // Si el warm-up falla, intentar reinicializar el cliente
+      console.log('🔄 Intentando reinicializar cliente Supabase...');
+      reinitializeSupabaseClient();
+      console.log('✅ Cliente reinicializado');
     } else {
       console.log('✅ Query de warm-up exitosa');
     }
@@ -348,6 +359,16 @@ export async function reconnectSupabase(): Promise<void> {
     console.log('✅ Reconexión completada');
   } catch (err) {
     console.error('❌ Error en reconnectSupabase:', err);
+
+    // Último recurso: reinicializar el cliente
+    try {
+      console.log('🔄 Reinicializando cliente como último recurso...');
+      reinitializeSupabaseClient();
+      console.log('✅ Cliente reinicializado como fallback');
+    } catch (reinitErr) {
+      console.error('❌ Error reinicializando cliente:', reinitErr);
+    }
+
     throw err;
   }
 }
@@ -356,7 +377,7 @@ export async function reconnectSupabase(): Promise<void> {
  * Reinicializa completamente el cliente de Supabase.
  * Cierra todas las conexiones existentes y crea un nuevo cliente.
  * IMPORTANTE: Solo actualiza la referencia interna, los imports existentes
- * seguirán usando el cliente antiguo.
+ * seguirán usando el cliente antiguo gracias al Proxy pattern.
  */
 export function reinitializeSupabaseClient(): SupabaseClient {
   console.log('🔄 REINICIALIZANDO CLIENTE SUPABASE...');
@@ -370,7 +391,7 @@ export function reinitializeSupabaseClient(): SupabaseClient {
     _supabaseClient.removeAllChannels();
     console.log('✅ Canales limpiados');
 
-    // 2. Crear nuevo cliente
+    // 2. Crear nuevo cliente con customFetch para keepalive
     console.log('🆕 Creando nuevo cliente...');
     const newClient = createClient(
       supabaseUrl || 'https://placeholder.supabase.co',
@@ -384,6 +405,9 @@ export function reinitializeSupabaseClient(): SupabaseClient {
           params: {
             eventsPerSecond: 10,
           },
+        },
+        global: {
+          fetch: customFetch, // Usar customFetch con keepalive
         },
       }
     );
