@@ -14,6 +14,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
+import { reinitializeSupabaseClient } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,7 @@ function App() {
   useEffect(() => {
     let hiddenTime: number | null = null;
 
-    const handleGlobalVisibilityChange = () => {
+    const handleGlobalVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
         // Guardar timestamp cuando se oculta la app
         hiddenTime = Date.now();
@@ -67,17 +68,25 @@ function App() {
       } else if (document.visibilityState === 'visible') {
         console.log('🌍 [GLOBAL] App vuelve a ser visible');
 
-        // Si estuvo oculta más de 5 segundos, refrescar automáticamente
-        if (hiddenTime && Date.now() - hiddenTime > 1) {
+        // Si estuvo oculta más de 3 segundos, reinicializar cliente de Supabase
+        if (hiddenTime && Date.now() - hiddenTime > 3000) {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
-          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Refrescando para evitar problemas de conexión...`);
+          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Reinicializando cliente Supabase...`);
 
-          // Pequeño delay para que el usuario vea que está pasando algo
-          setTimeout(() => {
-            window.location.reload();
-          }, 100);
+          try {
+            // Reinicializar SOLO el cliente de Supabase (sin refrescar página)
+            // Esto preserva el estado de React (formularios, inputs, etc.)
+            reinitializeSupabaseClient();
+
+            // Esperar un poco para que el nuevo cliente se estabilice
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            console.log('✅ [GLOBAL] Cliente Supabase reinicializado - Conexión restaurada');
+          } catch (err) {
+            console.error('❌ [GLOBAL] Error reinicializando cliente:', err);
+          }
         } else {
-          console.log('✅ [GLOBAL] App estuvo minimizada poco tiempo - No es necesario refrescar');
+          console.log('✅ [GLOBAL] App estuvo minimizada poco tiempo - No es necesario reinicializar');
         }
 
         hiddenTime = null;
