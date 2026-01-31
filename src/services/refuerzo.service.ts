@@ -31,7 +31,7 @@ export async function getRefuerzoInfo(
     .eq('partido_id', partidoId)
     .eq('jugador_id', jugadorId);
 
-  const cuartosJugados = cuartos?.map(c => c.cuarto) || [];
+  const cuartosJugados = cuartos?.map((c: any) => c.cuarto) || [];
   const limite = jugador.cuartos_limite || 4;
 
   // Ya jugó este cuarto? puede continuar
@@ -87,7 +87,7 @@ export async function getRefuerzosEquipo(
   if (!jugadores || jugadores.length === 0) return result;
 
   // Obtener cuartos jugados de todos
-  const jugadorIds = jugadores.map(j => j.id);
+  const jugadorIds = jugadores.map((j: any) => j.id);
   const { data: cuartos } = await supabase
     .from('jugador_cuartos')
     .select('jugador_id, cuarto')
@@ -96,7 +96,7 @@ export async function getRefuerzosEquipo(
 
   // Construir mapa
   for (const j of jugadores) {
-    const cuartosJugados = cuartos?.filter(c => c.jugador_id === j.id).map(c => c.cuarto) || [];
+    const cuartosJugados = cuartos?.filter((c: any) => c.jugador_id === j.id).map((c: any) => c.cuarto) || [];
     const limite = j.cuartos_limite || 4;
     result.set(j.id, {
       esRefuerzo: true,

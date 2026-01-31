@@ -73,12 +73,12 @@ export async function getDatosPlanilla(partidoId: string): Promise<DatosPlanilla
     .select('jugador_id, puntos, faltas_personales')
     .eq('partido_id', partidoId);
 
-  const statsMap = new Map(stats?.map(s => [s.jugador_id, s]) || []);
+  const statsMap = new Map(stats?.map((s: any) => [s.jugador_id, s]) || []);
 
   // Función para mapear jugadores con stats
   const mapJugadores = (jugadores: any[]): JugadorPlanilla[] => {
     return (jugadores || []).map(j => {
-      const s = statsMap.get(j.id);
+      const s = statsMap.get(j.id) as any;
       return {
         numero: j.numero_camiseta,
         nombre: j.nombre,
