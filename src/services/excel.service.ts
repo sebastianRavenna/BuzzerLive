@@ -226,3 +226,4 @@ export async function exportarJugadoresEquipo(equipoId: string, nombreEquipo: st
   
   XLSX.writeFile(wb, `jugadores_${nombreEquipo.replace(/\s+/g, '_')}.xlsx`);
 }
+
