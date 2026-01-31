@@ -290,28 +290,57 @@ export function PartidoLivePage() {
 
   // NOTA: El handler de visibilityChange ahora está centralizado en App.tsx con auto-refresh
 
-  // 🔄 Auto-refresh específico para PartidoLivePage después de minimizar
-  // Esto es necesario porque Realtime se congela y la UI no se actualiza
-  // aunque las RPC (con callRpcDirect) funcionen correctamente
+  // 🔄 Sistema de polling cuando Realtime se congela (Opción 2 - definitiva)
+  // Detecta cuando el cliente se congeló y cambia a polling manual
+  // Funciona incluso offline porque las acciones se guardan localmente primero
   useEffect(() => {
     let hiddenTime: number | null = null;
+    let pollingInterval: NodeJS.Timeout | null = null;
 
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
         hiddenTime = Date.now();
         console.log('⚽ [PartidoLive] Minimizada');
       } else if (document.visibilityState === 'visible') {
         console.log('⚽ [PartidoLive] Vuelve a ser visible');
 
-        // Si estuvo minimizada >5 segundos, auto-reload
+        // Si estuvo minimizada >5 segundos, activar modo polling
         if (hiddenTime && Date.now() - hiddenTime > 5000) {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
-          console.log(`🔄 [PartidoLive] Estuvo minimizada ${secondsHidden}s - Refrescando para reconectar Realtime...`);
+          console.log(`🔄 [PartidoLive] Estuvo minimizada ${secondsHidden}s - Activando modo polling...`);
 
-          // Pequeño delay para que los logs se vean
-          setTimeout(() => {
-            window.location.reload();
-          }, 300);
+          // Activar polling cada 3 segundos para actualizar datos
+          if (!pollingInterval && id) {
+            console.log('⏰ [PartidoLive] Iniciando polling cada 3s (bypass Realtime congelado)');
+
+            // Primera actualización inmediata
+            try {
+              const data = await getPartidoCompleto(id);
+              setPartido(data.partido);
+              setEquipoLocal(data.equipoLocal);
+              setEquipoVisitante(data.equipoVisitante);
+              setJugadoresLocal(data.jugadoresLocal);
+              setJugadoresVisitante(data.jugadoresVisitante);
+              console.log('✅ [Polling] Datos actualizados (inicial)');
+            } catch (err) {
+              console.error('❌ [Polling] Error en actualización inicial:', err);
+            }
+
+            // Polling continuo
+            pollingInterval = setInterval(async () => {
+              try {
+                const data = await getPartidoCompleto(id);
+                setPartido(data.partido);
+                setEquipoLocal(data.equipoLocal);
+                setEquipoVisitante(data.equipoVisitante);
+                setJugadoresLocal(data.jugadoresLocal);
+                setJugadoresVisitante(data.jugadoresVisitante);
+                console.log('✅ [Polling] Datos actualizados');
+              } catch (err) {
+                console.warn('⚠️ [Polling] Error (puede ser offline):', err);
+              }
+            }, 3000);
+          }
         }
 
         hiddenTime = null;
@@ -322,8 +351,12 @@ export function PartidoLivePage() {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (pollingInterval) {
+        console.log('🛑 [Polling] Deteniendo polling');
+        clearInterval(pollingInterval);
+      }
     };
-  }, []);
+  }, [id]);
 
 
   // Sincronizar cola offline
