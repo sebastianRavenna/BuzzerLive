@@ -14,7 +14,6 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { reconnectSupabase } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -56,34 +55,34 @@ function App() {
     };
   }, []);
 
-  // 🔌 Handler GLOBAL de reconexión cuando la app vuelve de estar minimizada
+  // 🔌 Auto-reload cuando la app vuelve de estar minimizada
+  // Esto garantiza que las conexiones RPC funcionen correctamente.
+  // Los formularios se preservan usando useFormAutoSave hook.
+  // La sesión de usuario se preserva automáticamente (persistSession: true).
   useEffect(() => {
     let hiddenTime: number | null = null;
 
-    const handleGlobalVisibilityChange = async () => {
+    const handleGlobalVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // Guardar timestamp cuando se oculta la app
+        // Guardar timestamp cuando se minimiza
         hiddenTime = Date.now();
-        console.log('🌍 [GLOBAL] App minimizada en:', new Date().toISOString());
+        console.log('🌍 [GLOBAL] App minimizada');
       } else if (document.visibilityState === 'visible') {
         console.log('🌍 [GLOBAL] App vuelve a ser visible');
 
-        // Si estuvo oculta más de 3 segundos, reconectar Supabase
-        if (hiddenTime && Date.now() - hiddenTime > 3000) {
+        // Si estuvo minimizada >5 segundos, auto-reload
+        if (hiddenTime && Date.now() - hiddenTime > 1) {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
-          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Reconectando Supabase...`);
+          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s`);
+          console.log('🔄 [GLOBAL] Recargando para restaurar conexión...');
+          console.log('💡 [GLOBAL] Formularios y sesión se preservan automáticamente');
 
-          try {
-            // Reconectar solo Realtime y hacer warm-up (sin crear nuevo cliente)
-            // Esto preserva la sesión de auth, formularios y estado de React
-            await reconnectSupabase();
-
-            console.log('✅ [GLOBAL] Supabase reconectado - Conexión restaurada');
-          } catch (err) {
-            console.error('❌ [GLOBAL] Error reconectando:', err);
-          }
+          // Reload después de 300ms para que los logs se vean
+          setTimeout(() => {
+            window.location.reload();
+          }, 300);
         } else {
-          console.log('✅ [GLOBAL] App estuvo minimizada poco tiempo - No es necesario reinicializar');
+          console.log('✅ [GLOBAL] Minimizada poco tiempo - Sin reload');
         }
 
         hiddenTime = null;
