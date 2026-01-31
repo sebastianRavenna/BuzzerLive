@@ -14,12 +14,10 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { reconnectSupabase } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<Usuario | null>(null);
-  const [reconnectKey, setReconnectKey] = useState(0); // Fuerza re-render de componentes después de reconectar
   const minimizedTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -58,12 +56,13 @@ function App() {
     };
   }, []);
 
-  // Reconectar cliente Supabase cuando se maximiza
-  // Esto "despierta" el cliente congelado después de minimizar
+  // Recargar la página cuando se maximiza después de estar minimizada
+  // El cliente Supabase queda congelado después de minimizar con usuario logueado
+  // La única forma confiable de arreglarlo es recargar la página
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden) {
-        // App minimizada
+        // App minimizada - guardar timestamp
         minimizedTimeRef.current = Date.now();
         console.log('🔽 [App] App minimizada');
       } else {
@@ -71,18 +70,11 @@ function App() {
         const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
         console.log(`🔼 [App] App maximizada después de ${timeMinimized.toFixed(0)}s`);
 
-        if (user) {
-          // Si hay usuario logueado, reconectar cliente Supabase
-          console.log('🔄 [App] Reconectando cliente Supabase...');
-          try {
-            await reconnectSupabase();
-            console.log('✅ [App] Cliente Supabase reconectado');
-            // Forzar re-fetch de datos en todos los componentes
-            setReconnectKey(k => k + 1);
-            console.log('🔄 [App] Forzando refresh de datos...');
-          } catch (err) {
-            console.error('❌ [App] Error reconectando Supabase:', err);
-          }
+        // Si hay usuario logueado y estuvo minimizada más de 5 segundos, recargar
+        // El cliente Supabase queda congelado y no hay forma de recuperarlo sin reload
+        if (user && timeMinimized > 5) {
+          console.log('🔄 [App] Recargando página para restaurar conexión...');
+          window.location.reload();
         }
       }
     };
@@ -90,9 +82,6 @@ function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [user]);
-
-  // NOTA: Auto-reload removido - ahora las RPC usan fetch() directo con keepalive
-  // que funciona correctamente incluso después de minimizar la app.
 
   if (loading) {
     return (
@@ -104,7 +93,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes key={reconnectKey}>
+      <Routes>
         {/* Rutas de autenticación */}
         <Route path="/login" element={<LoginPage />} />
         
