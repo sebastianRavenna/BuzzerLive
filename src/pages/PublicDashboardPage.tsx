@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { restDirect } from '../services/supabase';
 import { getTablaPosiciones } from '../services/torneo.service';
 import type { Organizacion, Torneo, MarcadorPartido } from '../types';
 
@@ -42,14 +42,15 @@ export function PublicDashboardPage() {
       }
 
       try {
-        // Obtener organización
-        const { data: orgData, error: orgError } = await supabase
-          .from('organizaciones')
-          .select('*')
-          .eq('slug', orgSlug)
-          .single();
+        // Obtener organización usando restDirect para evitar congelamiento
+        const { data: orgData, error: orgError } = await restDirect<Organizacion>('organizaciones', {
+          method: 'GET',
+          select: '*',
+          filters: { slug: orgSlug },
+          single: true,
+        });
 
-        if (orgError) throw orgError;
+        if (orgError) throw new Error(orgError.message);
         if (!orgData) {
           setError('Organización no encontrada');
           setLoading(false);
@@ -59,16 +60,17 @@ export function PublicDashboardPage() {
         setOrg(orgData);
 
         // Obtener torneos activos (PROGRAMADO, PLANIFICACION, EN_CURSO)
-        const { data: torneosData, error: torneosError } = await supabase
-          .from('torneos')
-          .select('*')
-          .eq('organizacion_id', orgData.id)
-          .in('estado', ['PROGRAMADO', 'PLANIFICACION', 'EN_CURSO'])
-          .order('created_at', { ascending: false });
+        const { data: torneosData, error: torneosError } = await restDirect<Torneo[]>('torneos', {
+          method: 'GET',
+          select: '*',
+          filters: { organizacion_id: orgData.id },
+          rawFilters: ['estado=in.(PROGRAMADO,PLANIFICACION,EN_CURSO)'],
+          order: { column: 'created_at', ascending: false },
+        });
 
         if (torneosError) {
           console.error('Error cargando torneos:', torneosError);
-          throw torneosError;
+          throw new Error(torneosError.message);
         }
 
         setTorneos(torneosData || []);
@@ -97,18 +99,15 @@ export function PublicDashboardPage() {
         const posicionesData = await getTablaPosiciones(selectedTorneo.id);
         setPosiciones(posicionesData);
 
-        // Obtener partidos del torneo desde la tabla partidos
-        const { data: partidosData, error: partidosError } = await supabase
-          .from('partidos')
-          .select(`
-            *,
-            equipo_local:equipos!partidos_equipo_local_id_fkey(nombre, nombre_corto, escudo_url),
-            equipo_visitante:equipos!partidos_equipo_visitante_id_fkey(nombre, nombre_corto, escudo_url)
-          `)
-          .eq('torneo_id', selectedTorneo.id)
-          .order('fecha', { ascending: true });
+        // Obtener partidos del torneo usando restDirect
+        const { data: partidosData, error: partidosError } = await restDirect<any[]>('partidos', {
+          method: 'GET',
+          select: '*, equipo_local:equipos!partidos_equipo_local_id_fkey(nombre, nombre_corto, escudo_url), equipo_visitante:equipos!partidos_equipo_visitante_id_fkey(nombre, nombre_corto, escudo_url)',
+          filters: { torneo_id: selectedTorneo.id },
+          order: { column: 'fecha', ascending: true },
+        });
 
-        if (partidosError) throw partidosError;
+        if (partidosError) throw new Error(partidosError.message);
 
         // Transformar a formato compatible con el componente
         const partidosFormateados = (partidosData || []).map(p => ({

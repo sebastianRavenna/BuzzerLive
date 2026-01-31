@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { restDirect, isSupabaseConfigured } from '../services/supabase';
 import type { TablaPosicion, Torneo } from '../types';
 
 export function PosicionesPage() {
@@ -19,14 +19,16 @@ export function PosicionesPage() {
     }
     
     async function fetchTorneos() {
-      const { data, error } = await supabase
-        .from('torneos')
-        .select('*')
-        .eq('estado', 'EN_CURSO')
-        .order('nombre');
-      
-      if (error) {
-        setError(error.message);
+      // Usar restDirect para evitar congelamiento después de minimize
+      const { data, error: fetchError } = await restDirect<Torneo[]>('torneos', {
+        method: 'GET',
+        select: '*',
+        filters: { estado: 'EN_CURSO' },
+        order: { column: 'nombre', ascending: true },
+      });
+
+      if (fetchError) {
+        setError(fetchError.message);
       } else if (data) {
         setTorneos(data);
         if (data.length > 0) {
@@ -44,14 +46,16 @@ export function PosicionesPage() {
     if (!torneoSeleccionado || !configured) return;
     
     async function fetchPosiciones() {
-      const { data, error } = await supabase
-        .from('tabla_posiciones')
-        .select('*')
-        .eq('torneo_id', torneoSeleccionado)
-        .order('posicion');
-      
-      if (error) {
-        setError(error.message);
+      // Usar restDirect para evitar congelamiento después de minimize
+      const { data, error: fetchError } = await restDirect<TablaPosicion[]>('tabla_posiciones', {
+        method: 'GET',
+        select: '*',
+        filters: { torneo_id: torneoSeleccionado },
+        order: { column: 'posicion', ascending: true },
+      });
+
+      if (fetchError) {
+        setError(fetchError.message);
       } else if (data) {
         setPosiciones(data);
       }
