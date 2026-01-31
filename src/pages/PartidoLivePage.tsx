@@ -290,6 +290,41 @@ export function PartidoLivePage() {
 
   // NOTA: El handler de visibilityChange ahora está centralizado en App.tsx con auto-refresh
 
+  // 🔄 Auto-refresh específico para PartidoLivePage después de minimizar
+  // Esto es necesario porque Realtime se congela y la UI no se actualiza
+  // aunque las RPC (con callRpcDirect) funcionen correctamente
+  useEffect(() => {
+    let hiddenTime: number | null = null;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenTime = Date.now();
+        console.log('⚽ [PartidoLive] Minimizada');
+      } else if (document.visibilityState === 'visible') {
+        console.log('⚽ [PartidoLive] Vuelve a ser visible');
+
+        // Si estuvo minimizada >5 segundos, auto-reload
+        if (hiddenTime && Date.now() - hiddenTime > 5000) {
+          const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
+          console.log(`🔄 [PartidoLive] Estuvo minimizada ${secondsHidden}s - Refrescando para reconectar Realtime...`);
+
+          // Pequeño delay para que los logs se vean
+          setTimeout(() => {
+            window.location.reload();
+          }, 300);
+        }
+
+        hiddenTime = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
 
   // Sincronizar cola offline
   const handleSyncOffline = async () => {
