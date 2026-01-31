@@ -11,7 +11,7 @@ import {
   PLANES,
   type Organizacion 
 } from '../services/organizacion.service';
-import { supabase } from '../services/supabase';
+import { restDirect } from '../services/supabase';
 
 type Tab = 'organizaciones' | 'stats';
 
@@ -184,18 +184,21 @@ export default function SuperAdminPage() {
       return;
     }
     
-    // Crear registro en usuarios
-    const { error: insertError } = await supabase.from('usuarios').insert({
-      auth_id: authId,
-      email: adminForm.email,
-      nombre: adminForm.nombre,
-      apellido: adminForm.apellido || null,
-      telefono: adminForm.telefono || null,
-      rol: 'admin',
-      organizacion_id: adminOrgId,
-      activo: true,
+    // Crear registro en usuarios usando restDirect para evitar congelamiento
+    const { error: insertError } = await restDirect('usuarios', {
+      method: 'POST',
+      body: {
+        auth_id: authId,
+        email: adminForm.email,
+        nombre: adminForm.nombre,
+        apellido: adminForm.apellido || null,
+        telefono: adminForm.telefono || null,
+        rol: 'admin',
+        organizacion_id: adminOrgId,
+        activo: true,
+      },
     });
-    
+
     if (insertError) {
       setError(insertError.message);
       return;
