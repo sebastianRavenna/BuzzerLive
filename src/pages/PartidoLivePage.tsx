@@ -1526,20 +1526,22 @@ export function PartidoLivePage() {
       </button>
       
       {/* Botones superiores derechos */}
-      <div className="absolute top-3 right-3 flex gap-2 z-10">
-        <button
-          onClick={() => setMostrarSuspender(true)}
-          className="px-3 py-2 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold rounded transition-colors"
-        >
-          SUSPENDER
-        </button>
-        <button
-          onClick={() => setMostrarConfirmacionFin(true)}
-          className="px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors"
-        >
-          FINALIZAR
-        </button>
-      </div>
+      {partido.estado !== 'FINALIZADO' && (
+        <div className="absolute top-3 right-3 flex gap-2 z-10">
+          <button
+            onClick={() => setMostrarSuspender(true)}
+            className="px-3 py-2 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold rounded transition-colors"
+          >
+            SUSPENDER
+          </button>
+          <button
+            onClick={() => setMostrarConfirmacionFin(true)}
+            className="px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold rounded transition-colors"
+          >
+            FINALIZAR
+          </button>
+        </div>
+      )}
       
       {/* Indicador de conexión */}
       {(!online || pendientes > 0) && (
@@ -1652,18 +1654,20 @@ export function PartidoLivePage() {
         </div>
         
         {/* Toggle DESCONTAR */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => setModoDescontar(!modoDescontar)}
-            className={`px-4 sm:px-8 py-2 sm:py-3 text-sm sm:text-base font-bold rounded-xl transition-all ${
-              modoDescontar
-                ? 'bg-orange-500 text-white ring-4 ring-orange-300'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            {modoDescontar ? '✓ DESCONTAR ACTIVO' : 'DESCONTAR'}
-          </button>
-        </div>
+        {partido.estado !== 'FINALIZADO' && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setModoDescontar(!modoDescontar)}
+              className={`px-4 sm:px-8 py-2 sm:py-3 text-sm sm:text-base font-bold rounded-xl transition-all ${
+                modoDescontar
+                  ? 'bg-orange-500 text-white ring-4 ring-orange-300'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {modoDescontar ? '✓ DESCONTAR ACTIVO' : 'DESCONTAR'}
+            </button>
+          </div>
+        )}
         
         {/* Botones falta al entrenador */}
         <div className="mt-3 flex justify-center gap-4">

@@ -133,7 +133,11 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
           )}
         </button>
         
-        {user && <p className="mt-2 text-sm text-gray-500">Conectado como {user.email}</p>}
+        {user && (
+          <p className="mt-2 text-sm text-gray-500">
+            Hola {user.nombre}{user.apellido ? ` ${user.apellido}` : ''}
+          </p>
+        )}
       </section>
 
       {/* Organizaciones */}
@@ -179,13 +183,6 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key`}
         </section>
       )}
 
-      {/* Quick Actions */}
-      <section className="grid md:grid-cols-3 gap-6">
-        <QuickActionCard icon="📅" title="Partidos" description="Ver todos los partidos" to="/partidos" color="blue" />
-        <QuickActionCard icon="📊" title="Ver Posiciones" description="Tabla de posiciones actualizada" to="/posiciones" color="green" />
-        <QuickActionCard icon="🔴" title="Partidos en Vivo" description="Seguí los partidos en curso" to="/partidos?estado=en_curso" color="red" />
-      </section>
-      
       {/* Live Games */}
       <section className="bg-white rounded-xl shadow-md p-4">
         <div className="flex items-center justify-between mb-4">
@@ -266,20 +263,3 @@ function PartidoMiniCard({ partido }: { partido: MarcadorPartido }) {
   );
 }
 
-interface QuickActionCardProps { icon: string; title: string; description: string; to: string; color: 'blue' | 'green' | 'red'; }
-
-function QuickActionCard({ icon, title, description, to, color }: QuickActionCardProps) {
-  const colorClasses = {
-    blue: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-    green: 'bg-green-50 hover:bg-green-100 border-green-200',
-    red: 'bg-red-50 hover:bg-red-100 border-red-200',
-  };
-  
-  return (
-    <Link to={to} className={`block p-6 rounded-xl border-2 transition-all hover:shadow-md ${colorClasses[color]}`}>
-      <div className="text-4xl mb-3">{icon}</div>
-      <h3 className="text-lg font-bold text-gray-900 mb-1">{title}</h3>
-      <p className="text-sm text-gray-600">{description}</p>
-    </Link>
-  );
-}

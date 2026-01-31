@@ -56,6 +56,7 @@ export default function AdminPage() {
 
   const [showPartidoModal, setShowPartidoModal] = useState(false);
   const [partidoForm, setPartidoForm] = useState({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' });
+  const [editingPartido, setEditingPartido] = useState<PartidoLocal | null>(null);
 
   const [showAsignarModal, setShowAsignarModal] = useState(false);
   const [partidoAsignar, setPartidoAsignar] = useState<PartidoSinAsignar | null>(null);
@@ -254,18 +255,69 @@ export default function AdminPage() {
   const handleExportEquipo = (equipoId: string, nombre: string) => { exportarJugadoresEquipo(equipoId, nombre); };
 
   // PARTIDOS
-  const openCreatePartido = () => { setPartidoForm({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' }); setShowPartidoModal(true); };
+  const openCreatePartido = () => { setEditingPartido(null); setPartidoForm({ torneo_id: '', equipo_local_id: '', equipo_visitante_id: '', fecha: '', hora: '20:00', lugar: '' }); setShowPartidoModal(true); };
+  const openEditPartido = (p: PartidoLocal) => {
+    setEditingPartido(p);
+    setPartidoForm({
+      torneo_id: p.torneo_id || '',
+      equipo_local_id: p.equipo_local_id,
+      equipo_visitante_id: p.equipo_visitante_id,
+      fecha: p.fecha.split('T')[0],
+      hora: p.hora,
+      lugar: p.lugar || ''
+    });
+    setShowPartidoModal(true);
+  };
   const handleSavePartido = async () => {
     if (!user?.organizacion_id) return; setError(null);
-    const result = await restDirect('partidos', {
-      method: 'POST',
-      body: { torneo_id: partidoForm.torneo_id || null, equipo_local_id: partidoForm.equipo_local_id, equipo_visitante_id: partidoForm.equipo_visitante_id, fecha: partidoForm.fecha, hora: partidoForm.hora, lugar: partidoForm.lugar || null, organizacion_id: user.organizacion_id, estado: 'PROGRAMADO', cuarto_actual: 0, puntos_local: 0, puntos_visitante: 0 }
-    });
-    if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
-    setShowPartidoModal(false); loadData();
+
+    if (editingPartido) {
+      // Editar partido existente
+      const result = await restDirect('partidos', {
+        method: 'PATCH',
+        filters: { id: editingPartido.id },
+        body: {
+          torneo_id: partidoForm.torneo_id || null,
+          equipo_local_id: partidoForm.equipo_local_id,
+          equipo_visitante_id: partidoForm.equipo_visitante_id,
+          fecha: partidoForm.fecha,
+          hora: partidoForm.hora,
+          lugar: partidoForm.lugar || null
+        }
+      });
+      if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
+    } else {
+      // Crear nuevo partido
+      const result = await restDirect('partidos', {
+        method: 'POST',
+        body: {
+          torneo_id: partidoForm.torneo_id || null,
+          equipo_local_id: partidoForm.equipo_local_id,
+          equipo_visitante_id: partidoForm.equipo_visitante_id,
+          fecha: partidoForm.fecha,
+          hora: partidoForm.hora,
+          lugar: partidoForm.lugar || null,
+          organizacion_id: user.organizacion_id,
+          estado: 'PROGRAMADO',
+          cuarto_actual: 0,
+          puntos_local: 0,
+          puntos_visitante: 0
+        }
+      });
+      if (result.error) { console.error('Error:', result.error); setError(result.error.message); return; }
+    }
+
+    setShowPartidoModal(false); setEditingPartido(null); loadData();
   };
   const handleDeletePartido = async (p: PartidoLocal) => {
-    if (p.estado !== 'PROGRAMADO' || !confirm('¿Eliminar?')) return;
+    const mensaje = p.estado === 'PROGRAMADO'
+      ? '¿Eliminar este partido programado?'
+      : p.estado === 'EN_CURSO'
+      ? '¿Eliminar este partido en curso? Esta acción no se puede deshacer.'
+      : '¿Eliminar este partido finalizado? Esta acción no se puede deshacer.';
+
+    if (!confirm(mensaje)) return;
+
     await restDirect('partidos', {
       method: 'DELETE',
       filters: { id: p.id }
@@ -441,7 +493,8 @@ export default function AdminPage() {
                 <span className="text-gray-400 text-sm">{new Date(p.fecha).toLocaleDateString()} {p.hora}</span>
                 <button onClick={() => navigate(`/${orgSlug}/partido/${p.id}/live`)} className="px-3 py-1.5 bg-blue-600 cursor-pointer text-white rounded text-sm">{p.estado === 'EN_CURSO' ? 'Continuar' : p.estado === 'PROGRAMADO' ? 'Planillar' : 'Ver'}</button>
                 {p.estado === 'FINALIZADO' && <button onClick={() => imprimirPlanilla(p.id)} className="px-2 py-1.5 bg-purple-600 cursor-pointer hover:bg-purple-700 text-white rounded text-sm" title="Imprimir Planilla">🖨️</button>}
-                {p.estado === 'PROGRAMADO' && <button onClick={() => handleDeletePartido(p)} className="px-2 py-1.5 bg-red-600 cursor-pointer text-white rounded text-sm">🗑️</button>}
+                {p.estado === 'PROGRAMADO' && <button onClick={() => openEditPartido(p)} className="px-2 py-1.5 bg-yellow-600 cursor-pointer hover:bg-yellow-700 text-white rounded text-sm" title="Editar">✏️</button>}
+                {(p.estado === 'PROGRAMADO' || p.estado === 'EN_CURSO' || p.estado === 'FINALIZADO') && <button onClick={() => handleDeletePartido(p)} className="px-2 py-1.5 bg-red-600 cursor-pointer hover:bg-red-700 text-white rounded text-sm" title="Eliminar">🗑️</button>}
               </div>
             </div>
           ))}</div>
@@ -550,7 +603,7 @@ export default function AdminPage() {
 
       {showPartidoModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"><div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full">
-          <h2 className="text-xl font-bold text-white mb-4">Nuevo Partido</h2>
+          <h2 className="text-xl font-bold text-white mb-4">{editingPartido ? 'Editar' : 'Nuevo'} Partido</h2>
           <div className="space-y-4">
             <div><label className="block text-gray-300 text-sm mb-1">Torneo</label><select value={partidoForm.torneo_id} onChange={e => setPartidoForm({...partidoForm, torneo_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">Sin torneo</option>{torneos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-300 text-sm mb-1">Local *</label><select value={partidoForm.equipo_local_id} onChange={e => setPartidoForm({...partidoForm, equipo_local_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">-</option>{clubes.filter(c => c.activo).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div><div><label className="block text-gray-300 text-sm mb-1">Visitante *</label><select value={partidoForm.equipo_visitante_id} onChange={e => setPartidoForm({...partidoForm, equipo_visitante_id: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"><option value="">-</option>{clubes.filter(c => c.activo && c.id !== partidoForm.equipo_local_id).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div></div>
@@ -558,7 +611,7 @@ export default function AdminPage() {
             <div><label className="block text-gray-300 text-sm mb-1">Lugar</label><input type="text" value={partidoForm.lugar} onChange={e => setPartidoForm({...partidoForm, lugar: e.target.value})} className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white" /></div>
           </div>
           {error && <div className="mt-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{error}</div>}
-          <div className="flex gap-3 mt-6"><button onClick={() => setShowPartidoModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSavePartido} disabled={!partidoForm.equipo_local_id || !partidoForm.equipo_visitante_id || !partidoForm.fecha} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">Crear</button></div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setShowPartidoModal(false)} className="flex-1 py-2 bg-gray-600 cursor-pointer text-white rounded-lg">Cancelar</button><button onClick={handleSavePartido} disabled={!partidoForm.equipo_local_id || !partidoForm.equipo_visitante_id || !partidoForm.fecha} className="flex-1 py-2 bg-blue-600 cursor-pointer disabled:bg-gray-600 text-white rounded-lg font-medium">{editingPartido ? 'Guardar' : 'Crear'}</button></div>
         </div></div>
       )}
 

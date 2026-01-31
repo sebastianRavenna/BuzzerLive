@@ -1,12 +1,27 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePartidoStore } from '../../store/partidoStore';
+import { getCurrentUser, logout } from '../../services/auth.service';
 
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const connectionStatus = usePartidoStore((state) => state.connectionStatus);
-  
+  const user = getCurrentUser();
+
   // Don't show header on live scoring page (fullscreen)
   const isLivePage = location.pathname.includes('/live');
+
+  const handlePanelClick = () => {
+    if (user?.rol === 'superadmin') navigate('/superadmin');
+    else if (user?.rol === 'admin') navigate(`/${user.organizacion?.slug}`);
+    else if (user?.rol === 'club') navigate(`/${user.organizacion?.slug}/mi-club`);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+    window.location.reload();
+  };
   
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -35,10 +50,27 @@ export function Layout() {
               </Link>
               
               {/* Navigation */}
-              <nav className="hidden md:flex items-center gap-6">
+              <nav className="hidden md:flex items-center gap-4">
                 <NavLink to="/">Inicio</NavLink>
-                <NavLink to="/posiciones">Posiciones</NavLink>
-                <NavLink to="/partidos">Partidos</NavLink>
+                {!user && (
+                  <NavLink to="/login">Iniciar Sesión</NavLink>
+                )}
+                {user && (
+                  <>
+                    <button
+                      onClick={handlePanelClick}
+                      className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white"
+                    >
+                      Ir a Mi Panel
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white"
+                    >
+                      Cerrar Sesión
+                    </button>
+                  </>
+                )}
               </nav>
               
               {/* Mobile menu button */}
