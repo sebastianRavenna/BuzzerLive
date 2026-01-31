@@ -559,19 +559,37 @@ export async function registrarSustitucion(
 
   // 2. Actualizar es_titular en participaciones_partido para persistir cambios
   for (const s of sustituciones) {
-    // Marcar jugador que sale como NO titular
-    await restDirect('participaciones_partido', {
-      method: 'PATCH',
+    // Buscar y actualizar jugador que sale
+    const { data: participacionSale } = await restDirect<any>('participaciones_partido', {
+      method: 'GET',
       filters: { partido_id: partidoId, jugador_id: s.jugadorSaleId },
-      body: { es_titular: false, updated_at: new Date().toISOString() }
+      select: 'id',
+      single: true
     });
 
-    // Marcar jugador que entra como titular
-    await restDirect('participaciones_partido', {
-      method: 'PATCH',
+    if (participacionSale?.id) {
+      await restDirect('participaciones_partido', {
+        method: 'PATCH',
+        filters: { id: participacionSale.id },
+        body: { es_titular: false, updated_at: new Date().toISOString() }
+      });
+    }
+
+    // Buscar y actualizar jugador que entra
+    const { data: participacionEntra } = await restDirect<any>('participaciones_partido', {
+      method: 'GET',
       filters: { partido_id: partidoId, jugador_id: s.jugadorEntraId },
-      body: { es_titular: true, updated_at: new Date().toISOString() }
+      select: 'id',
+      single: true
     });
+
+    if (participacionEntra?.id) {
+      await restDirect('participaciones_partido', {
+        method: 'PATCH',
+        filters: { id: participacionEntra.id },
+        body: { es_titular: true, updated_at: new Date().toISOString() }
+      });
+    }
   }
 }
 
