@@ -79,21 +79,33 @@ export async function callRpcDirect<T = any>(
   functionName: string,
   params: Record<string, any>
 ): Promise<{ data: T | null; error: any }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log(`⏰ [RPC Direct] Timeout de 10s alcanzado para ${functionName}`);
+    controller.abort();
+  }, 10000);
+
   try {
     console.log(`🎯 [RPC Direct] Llamando ${functionName}`);
+    console.log(`📦 [RPC Direct] Parámetros:`, params);
 
     // 1. Obtener token de auth de la sesión actual
+    console.log('🔑 [RPC Direct] Obteniendo token de auth...');
     const { data: { session } } = await _supabaseClient.auth.getSession();
     const accessToken = session?.access_token;
 
     if (!accessToken) {
       console.warn('⚠️ [RPC Direct] Sin token de auth - usando anon key');
+    } else {
+      console.log('✅ [RPC Direct] Token de auth obtenido');
     }
 
     // 2. Construir URL del endpoint RPC
     const rpcUrl = `${supabaseUrl}/rest/v1/rpc/${functionName}`;
+    console.log(`🌐 [RPC Direct] URL:`, rpcUrl);
 
-    // 3. Hacer la llamada con fetch nativo + keepalive
+    // 3. Hacer la llamada con fetch nativo + keepalive + timeout
+    console.log('📡 [RPC Direct] Ejecutando fetch...');
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
@@ -103,8 +115,12 @@ export async function callRpcDirect<T = any>(
         'Prefer': 'return=representation',
       },
       body: JSON.stringify(params),
-      keepalive: true, // CRÍTICO: Mantiene conexión viva incluso en background
+      keepalive: true,
+      signal: controller.signal, // ⭐ Timeout control
     });
+
+    clearTimeout(timeoutId);
+    console.log(`📥 [RPC Direct] Respuesta recibida - Status: ${response.status}`);
 
     // 4. Parsear respuesta
     if (!response.ok) {
@@ -128,8 +144,22 @@ export async function callRpcDirect<T = any>(
     return { data, error: null };
 
   } catch (err: any) {
-    console.error(`❌ [RPC Direct] Exception en ${functionName}:`, err);
+    clearTimeout(timeoutId);
 
+    if (err.name === 'AbortError') {
+      console.error(`❌ [RPC Direct] Timeout en ${functionName} después de 10s`);
+      return {
+        data: null,
+        error: {
+          message: 'Timeout: La operación tardó demasiado',
+          details: 'El servidor no respondió en 10 segundos',
+          hint: 'Verifica tu conexión',
+          code: 'TIMEOUT',
+        }
+      };
+    }
+
+    console.error(`❌ [RPC Direct] Exception en ${functionName}:`, err);
     return {
       data: null,
       error: {
