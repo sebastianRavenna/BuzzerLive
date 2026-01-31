@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, callRpcDirect } from './supabase';
 import type { TipoAccion } from '../types';
 
 interface AccionPendiente {
@@ -86,7 +86,7 @@ export async function syncOfflineQueue(
       if (accion.esDescuento) {
         await syncDescontarAccion(accion);
       } else {
-        const { error } = await supabase.rpc('registrar_accion', {
+        const { error } = await callRpcDirect('registrar_accion', {
           p_partido_id: accion.partidoId,
           p_equipo_id: accion.equipoId,
           p_jugador_id: accion.jugadorId,
