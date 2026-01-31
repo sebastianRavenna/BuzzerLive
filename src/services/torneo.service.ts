@@ -399,7 +399,7 @@ async function syncEquiposFromPartidos(torneoId: string) {
 
   // Obtener equipos únicos de los partidos
   const equipoIds = new Set<string>();
-  partidos.forEach(p => {
+  partidos.forEach((p: any) => {
     equipoIds.add(p.equipo_local_id);
     equipoIds.add(p.equipo_visitante_id);
   });
@@ -410,7 +410,7 @@ async function syncEquiposFromPartidos(torneoId: string) {
     .select('equipo_id')
     .eq('torneo_id', torneoId);
 
-  const existentesIds = new Set(existentes?.map(e => e.equipo_id) || []);
+  const existentesIds = new Set(existentes?.map((e: any) => e.equipo_id) || []);
 
   // Agregar los equipos que faltan
   const equiposNuevos = Array.from(equipoIds).filter(id => !existentesIds.has(id));
@@ -476,7 +476,7 @@ export async function getTablaPosiciones(torneoId: string) {
   });
 
   // Calcular estadísticas
-  partidos.forEach((p) => {
+  partidos.forEach((p: any) => {
     if (p.estado !== 'FINALIZADO') return;
 
     const local = tabla[p.equipo_local_id];

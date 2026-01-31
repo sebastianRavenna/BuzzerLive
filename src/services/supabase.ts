@@ -42,13 +42,13 @@ console.log('🔌 Estado inicial Realtime:', _supabaseClient.realtime.connection
  */
 export const getSupabase = () => _supabaseClient;
 
-// Export backward compatible - uses getter pattern to always return current client
+// Export backward compatible - uses Proxy pattern to always return current client
 // This ensures all references use the latest client instance after reinit
-export const supabase = new Proxy({} as any, {
-  get(_target, prop) {
-    return _supabaseClient[prop as keyof typeof _supabaseClient];
+export const supabase = new Proxy(_supabaseClient, {
+  get(_target, prop: keyof SupabaseClient) {
+    return _supabaseClient[prop];
   }
-});
+}) as SupabaseClient;
 
 // Helper to check if Supabase is properly configured
 export const isSupabaseConfigured = () => {

@@ -98,11 +98,11 @@ export async function getPartidoCompleto(partidoId: string) {
     const participacion = participaciones?.find(p => p.jugador_id === jugador.id);
     
     // Contar faltas por tipo desde acciones
-    const faltasJugador = accionesFaltas?.filter(a => a.jugador_id === jugador.id) || [];
-    const faltas_tecnicas = faltasJugador.filter(a => a.tipo === 'FALTA_TECNICA').length;
-    const faltas_antideportivas = faltasJugador.filter(a => a.tipo === 'FALTA_ANTIDEPORTIVA').length;
-    const faltas_personales = faltasJugador.filter(a => a.tipo === 'FALTA_PERSONAL').length;
-    const expulsado_directo = faltasJugador.some(a => a.tipo === 'FALTA_DESCALIFICANTE');
+    const faltasJugador = accionesFaltas?.filter((a: any) => a.jugador_id === jugador.id) || [];
+    const faltas_tecnicas = faltasJugador.filter((a: any) => a.tipo === 'FALTA_TECNICA').length;
+    const faltas_antideportivas = faltasJugador.filter((a: any) => a.tipo === 'FALTA_ANTIDEPORTIVA').length;
+    const faltas_personales = faltasJugador.filter((a: any) => a.tipo === 'FALTA_PERSONAL').length;
+    const expulsado_directo = faltasJugador.some((a: any) => a.tipo === 'FALTA_DESCALIFICANTE');
     
     // Total de faltas = personales + técnicas + antideportivas
     const faltas_totales = faltas_personales + faltas_tecnicas + faltas_antideportivas;
@@ -155,12 +155,12 @@ export async function iniciarPartido(partidoId: string) {
   const partido = await getPartidoCompleto(partidoId);
   
   const participaciones = [
-    ...partido.jugadoresLocal.map(j => ({
+    ...partido.jugadoresLocal.map((j: any) => ({
       partido_id: partidoId,
       jugador_id: j.id,
       equipo_id: partido.equipoLocal.id,
     })),
-    ...partido.jugadoresVisitante.map(j => ({
+    ...partido.jugadoresVisitante.map((j: any) => ({
       partido_id: partidoId,
       jugador_id: j.id,
       equipo_id: partido.equipoVisitante.id,
@@ -507,7 +507,7 @@ export function suscribirseAPartido(
         table: 'partidos',
         filter: `id=eq.${partidoId}`,
       },
-      (payload) => {
+      (payload: any) => {
         onUpdate(payload.new as Partial<Partido>);
       }
     )
