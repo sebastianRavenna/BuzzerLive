@@ -67,15 +67,21 @@ export interface Organizacion extends BaseEntity {
   email?: string;
   sitio_web?: string;
   activa: boolean;
-  // Límites del plan
-  max_torneos: number;
-  max_clubes: number;
-  max_jugadores_por_club: number;
+  // Límites del plan (match DB column names)
+  limite_torneos: number;
+  limite_clubes: number;
+  limite_jugadores: number;
+  limite_partidos_mes?: number;
+  // Counters
+  torneos_count?: number;
+  clubes_count?: number;
+  jugadores_count?: number;
   plan: PlanOrganizacion;
 }
 
 // Usuario del sistema
 export interface Usuario extends BaseEntity {
+  auth_id?: string;
   email: string;
   nombre: string;
   apellido?: string;
@@ -83,6 +89,7 @@ export interface Usuario extends BaseEntity {
   avatar_url?: string;
   rol: RolUsuario;
   organizacion_id?: string;
+  club_id?: string;
   activo: boolean;
   ultimo_acceso?: string;
 }
@@ -128,7 +135,7 @@ export interface UsuarioClub extends BaseEntity {
 // Entrenador
 export interface Entrenador extends BaseEntity {
   equipo_id: string;
-  organizacion_id?: string;
+  organizacion_id: string;
   nombre: string;
   apellido: string;
   dni?: string;
@@ -136,10 +143,14 @@ export interface Entrenador extends BaseEntity {
   telefono?: string;
   email?: string;
   foto_url?: string;
-  licencia?: string;
+  licencia_entrenador?: string;
+  licencia_vencimiento?: string;
   certificado_medico_url?: string;
   certificado_medico_vencimiento?: string;
+  rol?: string; // 'principal' | 'asistente'
   activo: boolean;
+  // Alias for backwards compatibility
+  licencia?: string; // Maps to licencia_entrenador
 }
 
 // ============================================
@@ -177,7 +188,6 @@ export interface Equipo extends BaseEntity {
 export interface Jugador extends BaseEntity {
   organizacion_id?: string;
   equipo_id: string;
-  club_id?: string;
   credencial?: string;
   numero_camiseta: number;
   nombre: string;
@@ -186,26 +196,30 @@ export interface Jugador extends BaseEntity {
   fecha_nacimiento?: string;
   telefono?: string;
   email?: string;
+  direccion?: string;
   foto_url?: string;
   certificado_medico_url?: string;
   certificado_medico_vencimiento?: string;
+  ficha_federativa?: string;
+  categoria?: string;
+  posicion?: string;
+  altura?: number;
+  peso?: number;
   es_capitan: boolean;
   es_refuerzo: boolean;
-  cuartos_jugados_torneo?: Record<string, number>;
+  cuartos_limite?: number;
   activo: boolean;
 }
 
 // Partido
 export interface Partido extends BaseEntity {
   organizacion_id?: string;
-  torneo_id: string;
+  torneo_id?: string;
   equipo_local_id: string;
   equipo_visitante_id: string;
-  club_local_id?: string;
-  club_visitante_id?: string;
   entrenador_local_id?: string;
   entrenador_visitante_id?: string;
-  planillero_usuario_id?: string;
+  planillero_id?: string;
   fecha: string;
   hora?: string;
   lugar?: string;
@@ -221,12 +235,13 @@ export interface Partido extends BaseEntity {
   tiempos_muertos_local: number;
   tiempos_muertos_visitante: number;
   arbitro_principal?: string;
-  arbitro_auxiliar_1?: string;
-  arbitro_auxiliar_2?: string;
+  arbitro_auxiliar?: string;
+  anotador?: string;
   planillero?: string;
   cronometrista?: string;
   hora_inicio_real?: string;
   hora_fin_real?: string;
+  observaciones?: string;
 }
 
 export interface PuntosPorCuarto {
@@ -257,6 +272,10 @@ export interface ParticipacionPartido extends BaseEntity {
   equipo_id: string;
   puntos: number;
   faltas: number;
+  faltas_tecnicas: number;
+  faltas_antideportivas: number;
+  descalificado: boolean;
+  expulsado_directo: boolean;
   participo: boolean;
   es_titular: boolean;
 }
@@ -288,27 +307,27 @@ export interface MarcadorPartido {
   hora?: string;
   lugar?: string;
   observaciones?: string;
-  
+
   local_id: string;
   local_nombre: string;
   local_nombre_corto?: string;
-  local_escudo?: string;
+  local_escudo?: string; // From view: COALESCE(escudo_url, logo_url)
   puntos_local: number;
   faltas_equipo_local: number[];
   tiempos_muertos_local: number;
-  
+
   visitante_id: string;
   visitante_nombre: string;
   visitante_nombre_corto?: string;
-  visitante_escudo?: string;
+  visitante_escudo?: string; // From view: COALESCE(escudo_url, logo_url)
   puntos_visitante: number;
   faltas_equipo_visitante: number[];
   tiempos_muertos_visitante: number;
-  
+
   puntos_por_cuarto: PuntosPorCuarto;
-  
-  torneo_nombre: string;
-  torneo_categoria: string;
+
+  torneo_nombre?: string;
+  torneo_categoria?: string;
 }
 
 // Stats para SuperAdmin
@@ -396,9 +415,10 @@ export interface CreateOrganizacionForm {
   telefono?: string;
   direccion?: string;
   sitio_web?: string;
-  max_torneos?: number;
-  max_clubes?: number;
-  max_jugadores_por_club?: number;
+  limite_torneos?: number;
+  limite_clubes?: number;
+  limite_jugadores?: number;
+  limite_partidos_mes?: number;
   plan?: PlanOrganizacion;
 }
 
@@ -434,7 +454,9 @@ export interface CreateEntrenadorForm {
   fecha_nacimiento?: string;
   telefono?: string;
   email?: string;
-  licencia?: string;
+  licencia_entrenador?: string;
+  licencia_vencimiento?: string;
+  rol?: string;
 }
 
 export interface CreateTorneoForm {
@@ -458,7 +480,7 @@ export interface CreateEquipoForm {
 
 export interface CreateJugadorForm {
   equipo_id: string;
-  club_id?: string;
+  organizacion_id?: string;
   numero_camiseta: number;
   nombre: string;
   apellido: string;
@@ -469,17 +491,17 @@ export interface CreateJugadorForm {
   email?: string;
   es_capitan?: boolean;
   es_refuerzo?: boolean;
+  cuartos_limite?: number;
 }
 
 export interface CreatePartidoForm {
   torneo_id: string;
   equipo_local_id: string;
   equipo_visitante_id: string;
-  club_local_id?: string;
-  club_visitante_id?: string;
   fecha: string;
   hora?: string;
   lugar?: string;
   jornada?: number;
   fase?: string;
+  organizacion_id?: string;
 }
