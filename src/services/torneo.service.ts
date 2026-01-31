@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, restDirect } from './supabase';
 import type { EstadoTorneo } from '../types';
 
 export interface Torneo {
@@ -178,7 +178,10 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
   }
 
   // Eliminar equipos del torneo primero (tabla de relación torneo_equipos)
-  const { error: equiposError } = await supabase.from('torneo_equipos').delete().eq('torneo_id', id);
+  const { error: equiposError } = await restDirect('torneo_equipos', {
+    method: 'DELETE',
+    filters: { torneo_id: id }
+  });
 
   if (equiposError) {
     return { success: false, error: `Error al eliminar equipos del torneo: ${equiposError.message}` };
@@ -357,7 +360,10 @@ export async function generarFixture(
   }
 
   // Insertar partidos
-  const { error } = await supabase.from('partidos').insert(partidos);
+  const { error } = await restDirect('partidos', {
+    method: 'POST',
+    body: partidos
+  });
 
   if (error) {
     return { partidos: 0, error: error.message };

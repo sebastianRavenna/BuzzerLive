@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, restDirect } from './supabase';
 
 export interface Asignacion {
   id: string;
@@ -115,12 +115,15 @@ export async function asignarPlanillero(
   }
 
   // Crear asignación
-  const { error } = await supabase.from('asignaciones_planillero').insert({
-    partido_id: partidoId,
-    usuario_id: usuarioId,
-    rol,
-    notas: notas || null,
-    confirmado: false,
+  const { error } = await restDirect('asignaciones_planillero', {
+    method: 'POST',
+    body: {
+      partido_id: partidoId,
+      usuario_id: usuarioId,
+      rol,
+      notas: notas || null,
+      confirmado: false,
+    }
   });
 
   if (error) {
@@ -129,7 +132,11 @@ export async function asignarPlanillero(
 
   // Si es planillero principal, actualizar partido
   if (rol === 'planillero') {
-    await supabase.from('partidos').update({ planillero_id: usuarioId }).eq('id', partidoId);
+    await restDirect('partidos', {
+      method: 'PATCH',
+      filters: { id: partidoId },
+      body: { planillero_id: usuarioId }
+    });
   }
 
   return { success: true, error: null };
@@ -161,7 +168,11 @@ export async function quitarAsignacion(
 
   // Si era el planillero principal, limpiar partido
   if (asig?.rol === 'planillero') {
-    await supabase.from('partidos').update({ planillero_id: null }).eq('id', partidoId);
+    await restDirect('partidos', {
+      method: 'PATCH',
+      filters: { id: partidoId },
+      body: { planillero_id: null }
+    });
   }
 
   return { success: true, error: null };
