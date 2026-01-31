@@ -324,7 +324,11 @@ CREATE OR REPLACE FUNCTION registrar_accion(
     p_tipo tipo_accion,
     p_cuarto SMALLINT,
     p_timestamp_local TIMESTAMPTZ,
-    p_cliente_id VARCHAR(50) DEFAULT NULL
+    p_cliente_id VARCHAR(50) DEFAULT NULL,
+    p_tiros_libres SMALLINT DEFAULT NULL,
+    p_numero_falta SMALLINT DEFAULT NULL,
+    p_puntos_local SMALLINT DEFAULT NULL,
+    p_puntos_visitante SMALLINT DEFAULT NULL
 )
 RETURNS UUID AS $$
 DECLARE
@@ -335,10 +339,10 @@ DECLARE
 BEGIN
     -- Obtener info del partido
     SELECT * INTO v_partido FROM partidos WHERE id = p_partido_id;
-    
+
     -- Determinar si es equipo local o visitante
     v_es_local := (p_equipo_id = v_partido.equipo_local_id);
-    
+
     -- Calcular valor según tipo de acción
     CASE p_tipo
         WHEN 'PUNTO_1' THEN v_valor := 1;
@@ -346,14 +350,16 @@ BEGIN
         WHEN 'PUNTO_3' THEN v_valor := 3;
         ELSE v_valor := 0;
     END CASE;
-    
-    -- Insertar la acción
+
+    -- Insertar la acción con campos adicionales
     INSERT INTO acciones (
-        partido_id, equipo_id, jugador_id, tipo, cuarto, 
-        valor, timestamp_local, cliente_id
+        partido_id, equipo_id, jugador_id, tipo, cuarto,
+        valor, timestamp_local, cliente_id,
+        tiros_libres, numero_falta, puntos_local, puntos_visitante
     ) VALUES (
         p_partido_id, p_equipo_id, p_jugador_id, p_tipo, p_cuarto,
-        v_valor, p_timestamp_local, p_cliente_id
+        v_valor, p_timestamp_local, p_cliente_id,
+        p_tiros_libres, p_numero_falta, p_puntos_local, p_puntos_visitante
     ) RETURNING id INTO v_accion_id;
     
     -- Actualizar marcador del partido si es punto

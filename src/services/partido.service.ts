@@ -196,7 +196,7 @@ export async function registrarAccion(
 
   console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
 
-  // Llamar RPC usando fetch directo (bypasea el cliente de Supabase)
+  // Llamar RPC usando fetch directo con todos los campos (bypasea el cliente de Supabase)
   // Esto evita el bug de timeout después de minimizar la app
   const { data, error } = await callRpcDirect('registrar_accion', {
     p_partido_id: partidoId,
@@ -206,36 +206,14 @@ export async function registrarAccion(
     p_cuarto: cuarto,
     p_timestamp_local: timestampLocal,
     p_cliente_id: getClienteId(),
+    p_tiros_libres: tirosLibres > 0 ? tirosLibres : null,
+    p_numero_falta: numeroFalta,
+    p_puntos_local: puntosLocal,
+    p_puntos_visitante: puntosVisitante,
   });
 
   if (error) throw error;
-  
-  // Actualizar campos adicionales si es necesario
-  if (tirosLibres > 0 || numeroFalta !== null || puntosLocal !== null) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const { data: accionCreada } = await supabase
-      .from('acciones')
-      .select('id')
-      .eq('partido_id', partidoId)
-      .eq('jugador_id', jugadorId)
-      .eq('tipo', tipo)
-      .eq('timestamp_local', timestampLocal)
-      .single();
-    
-    if (accionCreada) {
-      const updateData: any = {};
-      if (tirosLibres > 0) updateData.tiros_libres = tirosLibres;
-      if (numeroFalta !== null) updateData.numero_falta = numeroFalta;
-      if (puntosLocal !== null) updateData.puntos_local = puntosLocal;
-      if (puntosVisitante !== null) updateData.puntos_visitante = puntosVisitante;
-      
-      if (Object.keys(updateData).length > 0) {
-        await supabase.from('acciones').update(updateData).eq('id', accionCreada.id);
-      }
-    }
-  }
-  
+
   return data;
 }
 
