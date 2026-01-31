@@ -509,7 +509,7 @@ export function PartidoLivePage() {
   const handleSustitucionMultiple = async (sustituciones: Array<{ entrando: JugadorEnPartido; saliendo: JugadorEnPartido }>, esLocal: boolean) => {
     const setTitulares = esLocal ? setTitularesLocal : setTitularesVisitante;
     const equipoId = esLocal ? equipoLocal?.id : equipoVisitante?.id;
-    
+
     setTitulares(prev => {
       const nuevoSet = new Set(prev);
       sustituciones.forEach(s => {
@@ -518,7 +518,7 @@ export function PartidoLivePage() {
       });
       return nuevoSet;
     });
-    
+
     // Limpiar selección
     if (esLocal) {
       setJugadorSeleccionadoLocal(null);
@@ -526,10 +526,10 @@ export function PartidoLivePage() {
       setJugadorSeleccionadoVisitante(null);
     }
 
-    // Registrar sustituciones en el log
+    // Registrar sustituciones en el log Y actualizar titulares en BD
     if (id && partido && equipoId) {
       try {
-        await registrarSustitucion(id, equipoId, partido.cuarto_actual, 
+        await registrarSustitucion(id, equipoId, partido.cuarto_actual,
           sustituciones.map(s => ({ jugadorEntraId: s.entrando.id, jugadorSaleId: s.saliendo.id }))
         );
       } catch (err) {
