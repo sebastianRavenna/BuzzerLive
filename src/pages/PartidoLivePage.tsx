@@ -309,24 +309,28 @@ export function PartidoLivePage() {
       if (connectionState !== 'open') {
         console.log('🔄 Reconectando Supabase Realtime...');
         supabase.realtime.connect();
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Esperar 2 segundos para que la conexión se establezca completamente
+        await new Promise(resolve => setTimeout(resolve, 2000));
         const newState = supabase.realtime.connectionState() as string;
         console.log(`🔌 Nuevo estado Realtime: ${newState}`);
       }
 
-      // 3. Probar conexión HTTP con timeout
+      // 3. Probar conexión HTTP con timeout (ahora prueba auth + query)
       console.log('🧪 Probando conexión HTTP...');
-      const isConnectionOk = await testSupabaseConnection(5000);
+      const isConnectionOk = await testSupabaseConnection(8000);
 
       // 4. Si la conexión HTTP falló, REINICIALIZAR cliente completo
       if (!isConnectionOk) {
         console.warn('⚠️ Conexión HTTP FALLO - Reinicializando cliente Supabase...');
         try {
           reinitializeSupabaseClient();
-          console.log('✅ Cliente reinicializado - Probando nuevamente...');
+          console.log('✅ Cliente reinicializado - Esperando estabilización...');
+
+          // Esperar a que el nuevo cliente se estabilice
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
           // Probar conexión después de reinicializar
-          const isConnectionOkAfterReinit = await testSupabaseConnection(5000);
+          const isConnectionOkAfterReinit = await testSupabaseConnection(8000);
           if (isConnectionOkAfterReinit) {
             console.log('✅ Conexión HTTP OK después de reinicializar');
           } else {
@@ -335,6 +339,8 @@ export function PartidoLivePage() {
         } catch (err) {
           console.error('❌ Error reinicializando cliente:', err);
         }
+      } else {
+        console.log('✅ Conexión HTTP OK - No es necesario reinicializar');
       }
 
       // 5. Recargar datos completos solo si el WebSocket estaba cerrado

@@ -14,6 +14,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
+import { supabase, testSupabaseConnection, reinitializeSupabaseClient } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -52,6 +53,60 @@ function App() {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
+    };
+  }, []);
+
+  // 🔌 Handler GLOBAL de reconexión cuando la app vuelve de estar minimizada
+  useEffect(() => {
+    const handleGlobalVisibilityChange = async () => {
+      // Solo actuar cuando la página vuelve a ser visible
+      if (document.visibilityState !== 'visible') return;
+
+      console.log('🌍 [GLOBAL] App vuelve a ser visible - Verificando conexión Supabase...');
+
+      // 1. Verificar estado del WebSocket de Supabase Realtime
+      const connectionState = supabase.realtime.connectionState() as string;
+      console.log(`🔌 [GLOBAL] Estado de Realtime: ${connectionState}`);
+
+      // 2. Reconectar WebSocket si está cerrado
+      if (connectionState !== 'open') {
+        console.log('🔄 [GLOBAL] Reconectando Supabase Realtime...');
+        supabase.realtime.connect();
+        // Esperar 2 segundos para que la conexión se establezca
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const newState = supabase.realtime.connectionState() as string;
+        console.log(`🔌 [GLOBAL] Nuevo estado Realtime: ${newState}`);
+      }
+
+      // 3. Probar conexión HTTP (auth + query)
+      const isConnectionOk = await testSupabaseConnection(8000);
+
+      // 4. Si falla, reinicializar cliente
+      if (!isConnectionOk) {
+        console.warn('⚠️ [GLOBAL] Conexión fallo - Reinicializando cliente Supabase...');
+        try {
+          reinitializeSupabaseClient();
+          console.log('✅ [GLOBAL] Cliente reinicializado - Esperando estabilización...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          const isConnectionOkAfterReinit = await testSupabaseConnection(8000);
+          if (isConnectionOkAfterReinit) {
+            console.log('✅ [GLOBAL] Conexión OK después de reinicializar');
+          } else {
+            console.error('❌ [GLOBAL] Conexión sigue fallando');
+          }
+        } catch (err) {
+          console.error('❌ [GLOBAL] Error reinicializando:', err);
+        }
+      } else {
+        console.log('✅ [GLOBAL] Conexión OK - Sin necesidad de reiniciar');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleGlobalVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleGlobalVisibilityChange);
     };
   }, []);
 

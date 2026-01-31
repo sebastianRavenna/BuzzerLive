@@ -35,8 +35,20 @@ let _supabaseClient = createClient(
 console.log('✅ Cliente Supabase creado');
 console.log('🔌 Estado inicial Realtime:', _supabaseClient.realtime.connectionState());
 
-// Export client (read-only for backward compatibility)
-export const supabase = _supabaseClient;
+/**
+ * Obtiene el cliente de Supabase actual.
+ * IMPORTANTE: Siempre usa getSupabase() en lugar de importar 'supabase' directamente
+ * para garantizar que se use el cliente más reciente después de reinicializaciones.
+ */
+export const getSupabase = () => _supabaseClient;
+
+// Export backward compatible - uses getter pattern to always return current client
+// This ensures all references use the latest client instance after reinit
+export const supabase = new Proxy({} as any, {
+  get(_target, prop) {
+    return _supabaseClient[prop as keyof typeof _supabaseClient];
+  }
+});
 
 // Helper to check if Supabase is properly configured
 export const isSupabaseConfigured = () => {
@@ -92,6 +104,7 @@ export function reinitializeSupabaseClient(): SupabaseClient {
 
 /**
  * Prueba la conexión HTTP del cliente actual con timeout.
+ * Prueba tanto auth como una query simple para validar que RPC funciona.
  * Útil para diagnosticar problemas de conexión después de minimizar.
  */
 export async function testSupabaseConnection(timeoutMs: number = 5000): Promise<boolean> {
@@ -106,12 +119,19 @@ export async function testSupabaseConnection(timeoutMs: number = 5000): Promise<
       }, timeoutMs);
     });
 
-    const testPromise = _supabaseClient.auth.getSession();
+    // Probar tanto auth como una query simple para validar conexión completa
+    const testPromise = Promise.all([
+      _supabaseClient.auth.getSession(),
+      _supabaseClient.from('partidos').select('id').limit(1)
+    ]);
 
-    const result = await Promise.race([testPromise, timeoutPromise]);
+    const [authResult, queryResult] = await Promise.race([testPromise, timeoutPromise]);
 
-    console.log('✅ Conexión HTTP OK - Session:', !!result.data.session);
-    return true;
+    const authOk = !!authResult.data.session;
+    const queryOk = !queryResult.error;
+
+    console.log('✅ Conexión HTTP OK - Auth:', authOk, 'Query:', queryOk);
+    return authOk || queryOk; // Al menos una debe funcionar
   } catch (err) {
     console.error('❌ Conexión HTTP FALLO:', err);
     return false;
