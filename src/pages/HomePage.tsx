@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { restDirect, isSupabaseConfigured } from '../services/supabase';
 import { getCurrentUser } from '../services/auth.service';
 import type { MarcadorPartido, Organizacion } from '../types';
 
@@ -25,46 +25,45 @@ export function HomePage() {
       try {
         if (!isMounted) return;
 
-        const { data: enVivo, error: errorEnVivo } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'EN_CURSO')
-          .limit(5);
+        // Usar restDirect en lugar de supabase.from() porque el cliente
+        // puede quedar congelado después de minimizar la app
+        const [enVivoResult, finalizadosResult, orgsResult] = await Promise.all([
+          restDirect<MarcadorPartido[]>('marcador_partido', {
+            method: 'GET',
+            select: '*',
+            filters: { estado: 'EN_CURSO' },
+            limit: 5,
+          }),
+          restDirect<MarcadorPartido[]>('marcador_partido', {
+            method: 'GET',
+            select: '*',
+            filters: { estado: 'FINALIZADO' },
+            order: { column: 'fecha', ascending: false },
+            limit: 5,
+          }),
+          restDirect<Organizacion[]>('organizaciones', {
+            method: 'GET',
+            select: '*',
+            filters: { activa: true },
+            order: { column: 'nombre', ascending: true },
+          }),
+        ]);
 
-        if (errorEnVivo) {
-          console.error('Error cargando partidos en vivo:', errorEnVivo);
+        if (enVivoResult.error) {
+          console.error('Error cargando partidos en vivo:', enVivoResult.error);
+        }
+        if (finalizadosResult.error) {
+          console.error('Error cargando resultados:', finalizadosResult.error);
+        }
+        if (orgsResult.error) {
+          console.error('Error cargando organizaciones:', orgsResult.error);
         }
 
         if (!isMounted) return;
 
-        const { data: finalizados, error: errorFinalizados } = await supabase
-          .from('marcador_partido')
-          .select('*')
-          .eq('estado', 'FINALIZADO')
-          .order('fecha', { ascending: false })
-          .limit(5);
-
-        if (errorFinalizados) {
-          console.error('Error cargando resultados:', errorFinalizados);
-        }
-
-        if (!isMounted) return;
-
-        const { data: orgs, error: errorOrgs } = await supabase
-          .from('organizaciones')
-          .select('*')
-          .eq('activa', true)
-          .order('nombre', { ascending: true });
-
-        if (errorOrgs) {
-          console.error('Error cargando organizaciones:', errorOrgs);
-        }
-
-        if (!isMounted) return;
-
-        setPartidosEnVivo(enVivo || []);
-        setUltimosResultados(finalizados || []);
-        setOrganizaciones(orgs || []);
+        setPartidosEnVivo(enVivoResult.data || []);
+        setUltimosResultados(finalizadosResult.data || []);
+        setOrganizaciones(orgsResult.data || []);
       } catch (error) {
         console.error('Error en fetchData:', error);
       } finally {
