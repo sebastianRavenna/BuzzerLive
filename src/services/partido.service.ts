@@ -196,52 +196,29 @@ export async function registrarAccion(
 
   console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
 
-  // Función auxiliar para ejecutar la RPC con timeout
-  const executeRpc = async (attemptNumber: number) => {
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        console.log(`⏰ Timeout: registrar_accion tardó más de 15 segundos (intento ${attemptNumber})`);
-        reject(new Error('Timeout: La operación tardó demasiado'));
-      }, 15000);
-    });
+  // Ejecutar la RPC con timeout de 10 segundos
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      console.log('⏰ Timeout: registrar_accion tardó más de 10 segundos');
+      reject(new Error('Timeout: La operación tardó demasiado'));
+    }, 10000);
+  });
 
-    const rpcPromise = supabase.rpc('registrar_accion', {
-      p_partido_id: partidoId,
-      p_equipo_id: equipoId,
-      p_jugador_id: jugadorId,
-      p_tipo: tipo,
-      p_cuarto: cuarto,
-      p_timestamp_local: timestampLocal,
-      p_cliente_id: getClienteId(),
-    });
+  const rpcPromise = supabase.rpc('registrar_accion', {
+    p_partido_id: partidoId,
+    p_equipo_id: equipoId,
+    p_jugador_id: jugadorId,
+    p_tipo: tipo,
+    p_cuarto: cuarto,
+    p_timestamp_local: timestampLocal,
+    p_cliente_id: getClienteId(),
+  });
 
-    console.log(`⏳ Esperando respuesta de registrar_accion (intento ${attemptNumber})...`);
-    return await Promise.race([rpcPromise, timeoutPromise]);
-  };
+  console.log('⏳ Esperando respuesta de registrar_accion...');
+  const result = await Promise.race([rpcPromise, timeoutPromise]);
+  console.log('✅ registrar_accion completado');
 
-  // Ejecutar RPC con retry automático (máximo 2 intentos)
-  let data, error;
-  try {
-    const result = await executeRpc(1);
-    console.log('✅ registrar_accion completado');
-    data = (result as { data: unknown }).data;
-    error = (result as { error: unknown }).error;
-  } catch (firstError) {
-    console.warn('⚠️ Primer intento falló, reintentando en 2 segundos...');
-
-    // Esperar 2 segundos antes de reintentar
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    try {
-      const result = await executeRpc(2);
-      console.log('✅ registrar_accion completado en segundo intento');
-      data = (result as { data: unknown }).data;
-      error = (result as { error: unknown }).error;
-    } catch (secondError) {
-      console.error('❌ Segundo intento también falló:', secondError);
-      throw secondError;
-    }
-  }
+  const { data, error } = result as { data: unknown; error: unknown };
 
   if (error) throw error;
   

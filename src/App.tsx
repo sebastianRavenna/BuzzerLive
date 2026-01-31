@@ -14,7 +14,6 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { supabase, testSupabaseConnection, reinitializeSupabaseClient, warmupRpcConnection } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -58,53 +57,31 @@ function App() {
 
   // 🔌 Handler GLOBAL de reconexión cuando la app vuelve de estar minimizada
   useEffect(() => {
-    const handleGlobalVisibilityChange = async () => {
-      // Solo actuar cuando la página vuelve a ser visible
-      if (document.visibilityState !== 'visible') return;
+    let hiddenTime: number | null = null;
 
-      console.log('🌍 [GLOBAL] App vuelve a ser visible - Verificando conexión Supabase...');
+    const handleGlobalVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Guardar timestamp cuando se oculta la app
+        hiddenTime = Date.now();
+        console.log('🌍 [GLOBAL] App minimizada en:', new Date().toISOString());
+      } else if (document.visibilityState === 'visible') {
+        console.log('🌍 [GLOBAL] App vuelve a ser visible');
 
-      // 1. Verificar estado del WebSocket de Supabase Realtime
-      const connectionState = supabase.realtime.connectionState() as string;
-      console.log(`🔌 [GLOBAL] Estado de Realtime: ${connectionState}`);
+        // Si estuvo oculta más de 5 segundos, refrescar automáticamente
+        if (hiddenTime && Date.now() - hiddenTime > 5000) {
+          const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
+          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Refrescando para evitar problemas de conexión...`);
 
-      // 2. Reconectar WebSocket si está cerrado
-      if (connectionState !== 'open') {
-        console.log('🔄 [GLOBAL] Reconectando Supabase Realtime...');
-        supabase.realtime.connect();
-        // Esperar 2 segundos para que la conexión se establezca
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const newState = supabase.realtime.connectionState() as string;
-        console.log(`🔌 [GLOBAL] Nuevo estado Realtime: ${newState}`);
-      }
-
-      // 3. Probar conexión HTTP (auth + query)
-      const isConnectionOk = await testSupabaseConnection(8000);
-
-      // 4. Si falla, reinicializar cliente
-      if (!isConnectionOk) {
-        console.warn('⚠️ [GLOBAL] Conexión fallo - Reinicializando cliente Supabase...');
-        try {
-          reinitializeSupabaseClient();
-          console.log('✅ [GLOBAL] Cliente reinicializado - Esperando estabilización...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          const isConnectionOkAfterReinit = await testSupabaseConnection(8000);
-          if (isConnectionOkAfterReinit) {
-            console.log('✅ [GLOBAL] Conexión OK después de reinicializar');
-          } else {
-            console.error('❌ [GLOBAL] Conexión sigue fallando');
-          }
-        } catch (err) {
-          console.error('❌ [GLOBAL] Error reinicializando:', err);
+          // Pequeño delay para que el usuario vea que está pasando algo
+          setTimeout(() => {
+            window.location.reload();
+          }, 100);
+        } else {
+          console.log('✅ [GLOBAL] App estuvo minimizada poco tiempo - No es necesario refrescar');
         }
-      } else {
-        console.log('✅ [GLOBAL] Conexión OK - Sin necesidad de reiniciar');
-      }
 
-      // 5. Warm-up de conexión RPC para prevenir timeouts en primera llamada
-      console.log('🔥 [GLOBAL] Haciendo warm-up de RPC...');
-      await warmupRpcConnection();
+        hiddenTime = null;
+      }
     };
 
     document.addEventListener('visibilitychange', handleGlobalVisibilityChange);

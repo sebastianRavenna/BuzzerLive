@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, testSupabaseConnection, reinitializeSupabaseClient, warmupRpcConnection } from '../services/supabase';
+import { supabase } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -288,92 +288,8 @@ export function PartidoLivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🔌 Reconectar Supabase Realtime cuando la app vuelve de estar minimizada
-  useEffect(() => {
-    if (!id) return;
+  // NOTA: El handler de visibilityChange ahora está centralizado en App.tsx con auto-refresh
 
-    const handleVisibilityChange = async () => {
-      // Solo actuar cuando la página vuelve a ser visible
-      if (document.visibilityState !== 'visible') return;
-
-      console.log('═══════════════════════════════════════════════');
-      console.log('👀 PartidoLivePage: App vuelve a ser visible');
-      console.log('⏱️ Timestamp:', new Date().toISOString());
-      console.log('═══════════════════════════════════════════════');
-
-      // 1. Verificar estado del WebSocket de Supabase Realtime
-      const connectionState = supabase.realtime.connectionState() as string;
-      console.log(`🔌 Estado de Realtime: ${connectionState}`);
-
-      // 2. Reconectar WebSocket si está cerrado
-      if (connectionState !== 'open') {
-        console.log('🔄 Reconectando Supabase Realtime...');
-        supabase.realtime.connect();
-        // Esperar 2 segundos para que la conexión se establezca completamente
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const newState = supabase.realtime.connectionState() as string;
-        console.log(`🔌 Nuevo estado Realtime: ${newState}`);
-      }
-
-      // 3. Probar conexión HTTP con timeout (ahora prueba auth + query)
-      console.log('🧪 Probando conexión HTTP...');
-      const isConnectionOk = await testSupabaseConnection(8000);
-
-      // 4. Si la conexión HTTP falló, REINICIALIZAR cliente completo
-      if (!isConnectionOk) {
-        console.warn('⚠️ Conexión HTTP FALLO - Reinicializando cliente Supabase...');
-        try {
-          reinitializeSupabaseClient();
-          console.log('✅ Cliente reinicializado - Esperando estabilización...');
-
-          // Esperar a que el nuevo cliente se estabilice
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          // Probar conexión después de reinicializar
-          const isConnectionOkAfterReinit = await testSupabaseConnection(8000);
-          if (isConnectionOkAfterReinit) {
-            console.log('✅ Conexión HTTP OK después de reinicializar');
-          } else {
-            console.error('❌ Conexión HTTP sigue fallando después de reinicializar');
-          }
-        } catch (err) {
-          console.error('❌ Error reinicializando cliente:', err);
-        }
-      } else {
-        console.log('✅ Conexión HTTP OK - No es necesario reinicializar');
-      }
-
-      // 5. Recargar datos completos solo si el WebSocket estaba cerrado
-      if (connectionState !== 'open') {
-        console.log('🔄 Recargando datos del partido (WebSocket estaba cerrado)...');
-        try {
-          const data = await getPartidoCompleto(id);
-          setPartido(data.partido);
-          setEquipoLocal(data.equipoLocal);
-          setEquipoVisitante(data.equipoVisitante);
-          setJugadoresLocal(data.jugadoresLocal);
-          setJugadoresVisitante(data.jugadoresVisitante);
-          console.log('✅ Datos recargados exitosamente');
-        } catch (err) {
-          console.error('❌ Error recargando datos:', err);
-        }
-      }
-
-      // 6. Warm-up de conexión RPC para prevenir timeouts en primera llamada
-      console.log('🔥 Haciendo warm-up de RPC...');
-      await warmupRpcConnection();
-
-      console.log('═══════════════════════════════════════════════');
-      console.log('✅ handleVisibilityChange COMPLETADO');
-      console.log('═══════════════════════════════════════════════');
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [id]);
 
   // Sincronizar cola offline
   const handleSyncOffline = async () => {
