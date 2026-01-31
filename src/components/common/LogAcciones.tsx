@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, restDirect } from '../../services/supabase';
+import { supabase } from '../../services/supabase';
 
 // Tipos para las relaciones de Supabase
 interface EquipoRelacion {
