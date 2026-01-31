@@ -14,7 +14,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { reinitializeSupabaseClient } from './services/supabase';
+import { reconnectSupabase } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -68,22 +68,19 @@ function App() {
       } else if (document.visibilityState === 'visible') {
         console.log('🌍 [GLOBAL] App vuelve a ser visible');
 
-        // Si estuvo oculta más de 3 segundos, reinicializar cliente de Supabase
+        // Si estuvo oculta más de 3 segundos, reconectar Supabase
         if (hiddenTime && Date.now() - hiddenTime > 3000) {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
-          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Reinicializando cliente Supabase...`);
+          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s - Reconectando Supabase...`);
 
           try {
-            // Reinicializar SOLO el cliente de Supabase (sin refrescar página)
-            // Esto preserva el estado de React (formularios, inputs, etc.)
-            reinitializeSupabaseClient();
+            // Reconectar solo Realtime y hacer warm-up (sin crear nuevo cliente)
+            // Esto preserva la sesión de auth, formularios y estado de React
+            await reconnectSupabase();
 
-            // Esperar un poco para que el nuevo cliente se estabilice
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            console.log('✅ [GLOBAL] Cliente Supabase reinicializado - Conexión restaurada');
+            console.log('✅ [GLOBAL] Supabase reconectado - Conexión restaurada');
           } catch (err) {
-            console.error('❌ [GLOBAL] Error reinicializando cliente:', err);
+            console.error('❌ [GLOBAL] Error reconectando:', err);
           }
         } else {
           console.log('✅ [GLOBAL] App estuvo minimizada poco tiempo - No es necesario reinicializar');

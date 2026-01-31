@@ -68,6 +68,50 @@ export const isSupabaseConfigured = () => {
 };
 
 /**
+ * Reconecta solo el Realtime del cliente actual sin crear un nuevo cliente.
+ * Esto evita problemas de múltiples instancias de GoTrueClient y preserva la sesión.
+ */
+export async function reconnectSupabase(): Promise<void> {
+  console.log('🔄 Reconectando Supabase después de minimizar...');
+
+  try {
+    // 1. Verificar estado de Realtime
+    const realtimeState = _supabaseClient.realtime.connectionState();
+    console.log('🔌 Estado Realtime antes:', realtimeState);
+
+    // 2. Si está cerrado, reconectar
+    if (realtimeState !== 'open') {
+      console.log('🔌 Reconectando Realtime...');
+      _supabaseClient.realtime.connect();
+
+      // Esperar un poco para que se conecte
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newState = _supabaseClient.realtime.connectionState();
+      console.log('🔌 Estado Realtime después:', newState);
+    }
+
+    // 3. Hacer una query simple para "despertar" la conexión HTTP/RPC
+    console.log('💓 Haciendo query de warm-up...');
+    const { error } = await _supabaseClient
+      .from('partidos')
+      .select('id')
+      .limit(1);
+
+    if (error) {
+      console.warn('⚠️ Query de warm-up falló:', error.message);
+    } else {
+      console.log('✅ Query de warm-up exitosa');
+    }
+
+    console.log('✅ Reconexión completada');
+  } catch (err) {
+    console.error('❌ Error en reconnectSupabase:', err);
+    throw err;
+  }
+}
+
+/**
  * Reinicializa completamente el cliente de Supabase.
  * Cierra todas las conexiones existentes y crea un nuevo cliente.
  * IMPORTANTE: Solo actualiza la referencia interna, los imports existentes
