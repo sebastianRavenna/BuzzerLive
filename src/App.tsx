@@ -14,7 +14,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { supabase, testSupabaseConnection, reinitializeSupabaseClient } from './services/supabase';
+import { supabase, testSupabaseConnection, reinitializeSupabaseClient, warmupRpcConnection } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -101,6 +101,10 @@ function App() {
       } else {
         console.log('✅ [GLOBAL] Conexión OK - Sin necesidad de reiniciar');
       }
+
+      // 5. Warm-up de conexión RPC para prevenir timeouts en primera llamada
+      console.log('🔥 [GLOBAL] Haciendo warm-up de RPC...');
+      await warmupRpcConnection();
     };
 
     document.addEventListener('visibilitychange', handleGlobalVisibilityChange);

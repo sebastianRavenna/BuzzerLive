@@ -196,12 +196,11 @@ export async function registrarAccion(
 
   console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
 
-  // Ejecutar la RPC con timeout de 15 segundos (más tolerante post-reconexión)
-  let data, error;
-  try {
+  // Función auxiliar para ejecutar la RPC con timeout
+  const executeRpc = async (attemptNumber: number) => {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
-        console.log('⏰ Timeout: registrar_accion tardó más de 15 segundos');
+        console.log(`⏰ Timeout: registrar_accion tardó más de 15 segundos (intento ${attemptNumber})`);
         reject(new Error('Timeout: La operación tardó demasiado'));
       }, 15000);
     });
@@ -216,15 +215,32 @@ export async function registrarAccion(
       p_cliente_id: getClienteId(),
     });
 
-    console.log('⏳ Esperando respuesta de registrar_accion...');
-    const result = await Promise.race([rpcPromise, timeoutPromise]);
+    console.log(`⏳ Esperando respuesta de registrar_accion (intento ${attemptNumber})...`);
+    return await Promise.race([rpcPromise, timeoutPromise]);
+  };
+
+  // Ejecutar RPC con retry automático (máximo 2 intentos)
+  let data, error;
+  try {
+    const result = await executeRpc(1);
     console.log('✅ registrar_accion completado');
     data = (result as { data: unknown }).data;
     error = (result as { error: unknown }).error;
-  } catch (err) {
-    console.error('❌ Error en registrar_accion:', err);
-    // Si timeout u otro error, lanzar
-    throw err;
+  } catch (firstError) {
+    console.warn('⚠️ Primer intento falló, reintentando en 2 segundos...');
+
+    // Esperar 2 segundos antes de reintentar
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    try {
+      const result = await executeRpc(2);
+      console.log('✅ registrar_accion completado en segundo intento');
+      data = (result as { data: unknown }).data;
+      error = (result as { error: unknown }).error;
+    } catch (secondError) {
+      console.error('❌ Segundo intento también falló:', secondError);
+      throw secondError;
+    }
   }
 
   if (error) throw error;
