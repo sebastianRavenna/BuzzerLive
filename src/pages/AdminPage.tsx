@@ -15,7 +15,7 @@ type TorneoTipo = 'liga' | 'copa' | 'liga_copa';
 
 interface ClubLocal { id: string; nombre: string; nombre_corto: string; logo_url: string | null; activo: boolean; direccion: string | null; telefono: string | null; email: string | null; }
 interface JugadorLocal { id: string; nombre: string; apellido: string; numero_camiseta: number; equipo_id: string; dni: string; fecha_nacimiento: string | null; certificado_medico_vencimiento: string | null; certificado_medico_url: string | null; foto_url: string | null; activo: boolean; es_refuerzo: boolean; cuartos_limite: number | null; equipo?: { nombre_corto: string }; }
-interface PartidoLocal { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; }
+interface PartidoLocal { id: string; fecha: string; hora: string; estado: string; equipo_local: { nombre_corto: string }; equipo_visitante: { nombre_corto: string }; equipo_local_id: string; equipo_visitante_id: string; puntos_local: number; puntos_visitante: number; torneo_id: string | null; torneo?: { nombre: string }; lugar?: string; }
 interface UsuarioLocal { id: string; email: string; nombre: string; apellido: string | null; rol: string; activo: boolean; club_id: string | null; club?: { nombre_corto: string }; }
 
 export default function AdminPage() {
