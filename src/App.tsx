@@ -55,46 +55,8 @@ function App() {
     };
   }, []);
 
-  // 🔌 Auto-reload cuando la app vuelve de estar minimizada
-  // Esto garantiza que las conexiones RPC funcionen correctamente.
-  // Los formularios se preservan usando useFormAutoSave hook.
-  // La sesión de usuario se preserva automáticamente (persistSession: true).
-  useEffect(() => {
-    let hiddenTime: number | null = null;
-
-    const handleGlobalVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // Guardar timestamp cuando se minimiza
-        hiddenTime = Date.now();
-        console.log('🌍 [GLOBAL] App minimizada');
-      } else if (document.visibilityState === 'visible') {
-        console.log('🌍 [GLOBAL] App vuelve a ser visible');
-
-        // Si estuvo minimizada >5 segundos, auto-reload
-        if (hiddenTime && Date.now() - hiddenTime > 1) {
-          const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
-          console.log(`🔄 [GLOBAL] App estuvo minimizada ${secondsHidden}s`);
-          console.log('🔄 [GLOBAL] Recargando para restaurar conexión...');
-          console.log('💡 [GLOBAL] Formularios y sesión se preservan automáticamente');
-
-          // Reload después de 300ms para que los logs se vean
-          setTimeout(() => {
-            window.location.reload();
-          }, 300);
-        } else {
-          console.log('✅ [GLOBAL] Minimizada poco tiempo - Sin reload');
-        }
-
-        hiddenTime = null;
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleGlobalVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleGlobalVisibilityChange);
-    };
-  }, []);
+  // NOTA: Auto-reload removido - ahora las RPC usan fetch() directo con keepalive
+  // que funciona correctamente incluso después de minimizar la app.
 
   if (loading) {
     return (

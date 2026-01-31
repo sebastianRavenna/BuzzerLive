@@ -68,6 +68,81 @@ export const isSupabaseConfigured = () => {
 };
 
 /**
+ * Llama una función RPC de Supabase usando fetch() nativo en lugar del cliente.
+ * Esto bypasea el cliente de Supabase que puede tener problemas después de minimizar.
+ *
+ * @param functionName - Nombre de la función RPC (ej: 'registrar_accion')
+ * @param params - Parámetros de la función
+ * @returns Respuesta de la RPC
+ */
+export async function callRpcDirect<T = any>(
+  functionName: string,
+  params: Record<string, any>
+): Promise<{ data: T | null; error: any }> {
+  try {
+    console.log(`🎯 [RPC Direct] Llamando ${functionName}`);
+
+    // 1. Obtener token de auth de la sesión actual
+    const { data: { session } } = await _supabaseClient.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      console.warn('⚠️ [RPC Direct] Sin token de auth - usando anon key');
+    }
+
+    // 2. Construir URL del endpoint RPC
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/${functionName}`;
+
+    // 3. Hacer la llamada con fetch nativo + keepalive
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey || '',
+        'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseAnonKey}`,
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify(params),
+      keepalive: true, // CRÍTICO: Mantiene conexión viva incluso en background
+    });
+
+    // 4. Parsear respuesta
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`❌ [RPC Direct] Error ${response.status}:`, errorData);
+
+      return {
+        data: null,
+        error: {
+          message: errorData.message || `HTTP ${response.status}`,
+          details: errorData.details || response.statusText,
+          hint: errorData.hint || '',
+          code: errorData.code || String(response.status),
+        }
+      };
+    }
+
+    const data = await response.json();
+    console.log(`✅ [RPC Direct] ${functionName} exitoso`);
+
+    return { data, error: null };
+
+  } catch (err: any) {
+    console.error(`❌ [RPC Direct] Exception en ${functionName}:`, err);
+
+    return {
+      data: null,
+      error: {
+        message: err.message || 'Network error',
+        details: err.toString(),
+        hint: '',
+        code: 'FETCH_ERROR',
+      }
+    };
+  }
+}
+
+/**
  * Reconecta solo el Realtime del cliente actual sin crear un nuevo cliente.
  * Esto evita problemas de múltiples instancias de GoTrueClient y preserva la sesión.
  */

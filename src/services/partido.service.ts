@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, callRpcDirect } from './supabase';
 import type { 
   Partido, 
   Equipo, 
@@ -145,7 +145,7 @@ export async function getPartidoCompleto(partidoId: string) {
 
 // Iniciar un partido
 export async function iniciarPartido(partidoId: string) {
-  const { data, error } = await supabase.rpc('iniciar_partido', {
+  const { data, error } = await callRpcDirect('iniciar_partido', {
     p_partido_id: partidoId
   });
 
@@ -196,15 +196,9 @@ export async function registrarAccion(
 
   console.log('🎯 Registrando acción:', tipo, 'Jugador:', jugadorId);
 
-  // Ejecutar la RPC con timeout de 10 segundos
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
-      console.log('⏰ Timeout: registrar_accion tardó más de 10 segundos');
-      reject(new Error('Timeout: La operación tardó demasiado'));
-    }, 10000);
-  });
-
-  const rpcPromise = supabase.rpc('registrar_accion', {
+  // Llamar RPC usando fetch directo (bypasea el cliente de Supabase)
+  // Esto evita el bug de timeout después de minimizar la app
+  const { data, error } = await callRpcDirect('registrar_accion', {
     p_partido_id: partidoId,
     p_equipo_id: equipoId,
     p_jugador_id: jugadorId,
@@ -213,12 +207,6 @@ export async function registrarAccion(
     p_timestamp_local: timestampLocal,
     p_cliente_id: getClienteId(),
   });
-
-  console.log('⏳ Esperando respuesta de registrar_accion...');
-  const result = await Promise.race([rpcPromise, timeoutPromise]);
-  console.log('✅ registrar_accion completado');
-
-  const { data, error } = result as { data: unknown; error: unknown };
 
   if (error) throw error;
   
@@ -361,7 +349,7 @@ async function descontarAccion(
 
 // Anular última acción
 export async function anularUltimaAccion(partidoId: string) {
-  const { data, error } = await supabase.rpc('anular_ultima_accion', {
+  const { data, error } = await callRpcDirect('anular_ultima_accion', {
     p_partido_id: partidoId
   });
 
@@ -427,7 +415,7 @@ export async function actualizarTiemposMuertos(
 
 // Finalizar partido
 export async function finalizarPartido(partidoId: string) {
-  const { data, error } = await supabase.rpc('finalizar_partido', {
+  const { data, error } = await callRpcDirect('finalizar_partido', {
     p_partido_id: partidoId
   });
 
