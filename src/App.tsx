@@ -18,6 +18,7 @@ import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services
 function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<Usuario | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Fuerza re-mount de componentes después de minimize
   const minimizedTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -56,25 +57,23 @@ function App() {
     };
   }, []);
 
-  // Recargar la página cuando se maximiza después de estar minimizada
-  // El cliente Supabase queda congelado después de minimizar con usuario logueado
-  // La única forma confiable de arreglarlo es recargar la página
+  // Forzar re-mount de componentes cuando se maximiza después de minimize
+  // Esto hace que los componentes re-fetch sus datos usando restDirect()
+  // que siempre funciona (el cliente Supabase puede quedar congelado)
   useEffect(() => {
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       if (document.hidden) {
-        // App minimizada - guardar timestamp
         minimizedTimeRef.current = Date.now();
         console.log('🔽 [App] App minimizada');
       } else {
-        // App maximizada
         const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
         console.log(`🔼 [App] App maximizada después de ${timeMinimized.toFixed(0)}s`);
 
-        // Si hay usuario logueado y estuvo minimizada más de 5 segundos, recargar
-        // El cliente Supabase queda congelado y no hay forma de recuperarlo sin reload
-        if (user && timeMinimized > 5) {
-          console.log('🔄 [App] Recargando página para restaurar conexión...');
-          window.location.reload();
+        // Siempre forzar refresh cuando hay usuario logueado
+        // Los componentes usan restDirect() que no se congela
+        if (user) {
+          console.log('🔄 [App] Refrescando componentes...');
+          setRefreshKey(k => k + 1);
         }
       }
     };
@@ -93,7 +92,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      <Routes key={refreshKey}>
         {/* Rutas de autenticación */}
         <Route path="/login" element={<LoginPage />} />
         
