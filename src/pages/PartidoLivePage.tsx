@@ -503,13 +503,22 @@ export function PartidoLivePage() {
         ...Array.from(titularesVisitante)
       ];
 
-      // Marcar titulares como es_titular = true
+      // Marcar titulares como es_titular = true (usando GET primero para obtener ID)
       for (const jugadorId of todosLosTitulares) {
-        await restDirect('participaciones_partido', {
-          method: 'PATCH',
+        const { data: participacion } = await restDirect<any>('participaciones_partido', {
+          method: 'GET',
           filters: { partido_id: id, jugador_id: jugadorId },
-          body: { es_titular: true }
+          select: 'id',
+          single: true
         });
+
+        if (participacion?.id) {
+          await restDirect('participaciones_partido', {
+            method: 'PATCH',
+            filters: { id: participacion.id },
+            body: { es_titular: true, updated_at: new Date().toISOString() }
+          });
+        }
       }
 
       // Marcar suplentes como es_titular = false
@@ -520,11 +529,20 @@ export function PartidoLivePage() {
       const suplentes = todosLosCitados.filter(jId => !todosLosTitulares.includes(jId));
 
       for (const jugadorId of suplentes) {
-        await restDirect('participaciones_partido', {
-          method: 'PATCH',
+        const { data: participacion } = await restDirect<any>('participaciones_partido', {
+          method: 'GET',
           filters: { partido_id: id, jugador_id: jugadorId },
-          body: { es_titular: false }
+          select: 'id',
+          single: true
         });
+
+        if (participacion?.id) {
+          await restDirect('participaciones_partido', {
+            method: 'PATCH',
+            filters: { id: participacion.id },
+            body: { es_titular: false, updated_at: new Date().toISOString() }
+          });
+        }
       }
 
       setPartido(prev => prev ? { ...prev, estado: 'EN_CURSO', cuarto_actual: 1 } : null);

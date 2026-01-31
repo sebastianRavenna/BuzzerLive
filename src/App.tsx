@@ -14,7 +14,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
-import { supabase } from './services/supabase';
+import { reconnectSupabase } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -57,8 +57,8 @@ function App() {
     };
   }, []);
 
-  // Refrescar sesión de auth cuando se minimiza y maximiza
-  // Esto soluciona el problema de congelamiento solo cuando estás logueado
+  // Reconectar cliente Supabase cuando se maximiza
+  // Esto "despierta" el cliente congelado después de minimizar
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden) {
@@ -70,18 +70,14 @@ function App() {
         const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
         console.log(`🔼 [App] App maximizada después de ${timeMinimized.toFixed(0)}s`);
 
-        if (timeMinimized > 5 && user) {
-          // Si estuvo minimizada >5s y hay usuario logueado, refrescar sesión
-          console.log('🔄 [App] Refrescando sesión de auth...');
+        if (user) {
+          // Si hay usuario logueado, reconectar cliente Supabase
+          console.log('🔄 [App] Reconectando cliente Supabase...');
           try {
-            const { data, error } = await supabase.auth.refreshSession();
-            if (error) {
-              console.warn('⚠️ [App] Error refrescando sesión:', error.message);
-            } else if (data.session) {
-              console.log('✅ [App] Sesión refrescada exitosamente');
-            }
+            await reconnectSupabase();
+            console.log('✅ [App] Cliente Supabase reconectado');
           } catch (err) {
-            console.error('❌ [App] Error refrescando sesión:', err);
+            console.error('❌ [App] Error reconectando Supabase:', err);
           }
         }
       }
