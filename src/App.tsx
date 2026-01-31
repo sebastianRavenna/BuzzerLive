@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Layout } from './components/common/Layout';
 import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
@@ -14,10 +14,12 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
+import { supabase } from './services/supabase';
 
 function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<Usuario | null>(null);
+  const minimizedTimeRef = useRef<number>(0);
 
   useEffect(() => {
     let isMounted = true; // 🛡️ Protección contra actualizaciones en componentes desmontados
@@ -54,6 +56,40 @@ function App() {
       }
     };
   }, []);
+
+  // Refrescar sesión de auth cuando se minimiza y maximiza
+  // Esto soluciona el problema de congelamiento solo cuando estás logueado
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.hidden) {
+        // App minimizada
+        minimizedTimeRef.current = Date.now();
+        console.log('🔽 [App] App minimizada');
+      } else {
+        // App maximizada
+        const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
+        console.log(`🔼 [App] App maximizada después de ${timeMinimized.toFixed(0)}s`);
+
+        if (timeMinimized > 5 && user) {
+          // Si estuvo minimizada >5s y hay usuario logueado, refrescar sesión
+          console.log('🔄 [App] Refrescando sesión de auth...');
+          try {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) {
+              console.warn('⚠️ [App] Error refrescando sesión:', error.message);
+            } else if (data.session) {
+              console.log('✅ [App] Sesión refrescada exitosamente');
+            }
+          } catch (err) {
+            console.error('❌ [App] Error refrescando sesión:', err);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]);
 
   // NOTA: Auto-reload removido - ahora las RPC usan fetch() directo con keepalive
   // que funciona correctamente incluso después de minimizar la app.

@@ -496,6 +496,37 @@ export function PartidoLivePage() {
           .eq('id', id);
       }
 
+      // CRÍTICO: Actualizar es_titular para los jugadores seleccionados
+      // Esto es necesario para que al refrescar la página se mantengan los titulares
+      const todosLosTitulares = [
+        ...Array.from(titularesLocal),
+        ...Array.from(titularesVisitante)
+      ];
+
+      // Marcar titulares como es_titular = true
+      for (const jugadorId of todosLosTitulares) {
+        await restDirect('participaciones_partido', {
+          method: 'PATCH',
+          filters: { partido_id: id, jugador_id: jugadorId },
+          body: { es_titular: true }
+        });
+      }
+
+      // Marcar suplentes como es_titular = false
+      const todosLosCitados = [
+        ...Array.from(citadosLocal),
+        ...Array.from(citadosVisitante)
+      ];
+      const suplentes = todosLosCitados.filter(jId => !todosLosTitulares.includes(jId));
+
+      for (const jugadorId of suplentes) {
+        await restDirect('participaciones_partido', {
+          method: 'PATCH',
+          filters: { partido_id: id, jugador_id: jugadorId },
+          body: { es_titular: false }
+        });
+      }
+
       setPartido(prev => prev ? { ...prev, estado: 'EN_CURSO', cuarto_actual: 1 } : null);
       setFase('en-juego');
     } catch (err) {
