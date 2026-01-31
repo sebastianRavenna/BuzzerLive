@@ -294,8 +294,30 @@ export function PartidoLivePage() {
   // Detecta cuando el cliente se congeló y cambia a polling manual
   // Funciona incluso offline porque las acciones se guardan localmente primero
   useEffect(() => {
+    if (!id) return;
+
+    let isMounted = true;
     let hiddenTime: number | null = null;
-    let pollingInterval: number | null = null;
+    let pollingIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    // Función compartida para actualizar datos del partido
+    const actualizarDatosPartido = async () => {
+      if (!isMounted) return;
+      try {
+        const data = await getPartidoCompleto(id);
+        if (isMounted) {
+          setPartido(data.partido);
+          setEquipoLocal(data.equipoLocal);
+          setEquipoVisitante(data.equipoVisitante);
+          setJugadoresLocal(data.jugadoresLocal);
+          setJugadoresVisitante(data.jugadoresVisitante);
+        }
+        return true;
+      } catch (err) {
+        console.warn('⚠️ [Polling] Error actualizando datos:', err);
+        return false;
+      }
+    };
 
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
@@ -309,36 +331,22 @@ export function PartidoLivePage() {
           const secondsHidden = Math.floor((Date.now() - hiddenTime) / 1000);
           console.log(`🔄 [PartidoLive] Estuvo minimizada ${secondsHidden}s - Activando modo polling...`);
 
+          // Limpiar polling anterior si existe
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+          }
+
           // Activar polling cada 3 segundos para actualizar datos
-          if (!pollingInterval && id) {
-            console.log('⏰ [PartidoLive] Iniciando polling cada 3s (bypass Realtime congelado)');
+          console.log('⏰ [PartidoLive] Iniciando polling cada 3s (bypass Realtime congelado)');
 
-            // Primera actualización inmediata
-            try {
-              const data = await getPartidoCompleto(id);
-              setPartido(data.partido);
-              setEquipoLocal(data.equipoLocal);
-              setEquipoVisitante(data.equipoVisitante);
-              setJugadoresLocal(data.jugadoresLocal);
-              setJugadoresVisitante(data.jugadoresVisitante);
-              console.log('✅ [Polling] Datos actualizados (inicial)');
-            } catch (err) {
-              console.error('❌ [Polling] Error en actualización inicial:', err);
-            }
+          // Primera actualización inmediata
+          await actualizarDatosPartido();
 
-            // Polling continuo
-            pollingInterval = setInterval(async () => {
-              try {
-                const data = await getPartidoCompleto(id);
-                setPartido(data.partido);
-                setEquipoLocal(data.equipoLocal);
-                setEquipoVisitante(data.equipoVisitante);
-                setJugadoresLocal(data.jugadoresLocal);
-                setJugadoresVisitante(data.jugadoresVisitante);
-                console.log('✅ [Polling] Datos actualizados');
-              } catch (err) {
-                console.warn('⚠️ [Polling] Error (puede ser offline):', err);
-              }
+          // Polling continuo (solo si sigue montado)
+          if (isMounted) {
+            pollingIntervalId = setInterval(async () => {
+              const success = await actualizarDatosPartido();
+              if (success) console.log('✅ [Polling] Datos actualizados');
             }, 3000);
           }
         }
@@ -350,10 +358,12 @@ export function PartidoLivePage() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      isMounted = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (pollingInterval) {
+      if (pollingIntervalId) {
         console.log('🛑 [Polling] Deteniendo polling');
-        clearInterval(pollingInterval);
+        clearInterval(pollingIntervalId);
+        pollingIntervalId = null;
       }
     };
   }, [id]);
@@ -486,7 +496,7 @@ export function PartidoLivePage() {
         : null;
 
       if (entrenadorLocalId || entrenadorVisitanteId) {
-        const updates: any = {};
+        const updates: { entrenador_local_id?: string; entrenador_visitante_id?: string } = {};
         if (entrenadorLocalId) updates.entrenador_local_id = entrenadorLocalId;
         if (entrenadorVisitanteId) updates.entrenador_visitante_id = entrenadorVisitanteId;
 
@@ -505,7 +515,7 @@ export function PartidoLivePage() {
 
       // Marcar titulares como es_titular = true (usando GET primero para obtener ID)
       for (const jugadorId of todosLosTitulares) {
-        const { data: participacion } = await restDirect<any>('participaciones_partido', {
+        const { data: participacion } = await restDirect<{ id: string }>('participaciones_partido', {
           method: 'GET',
           filters: { partido_id: id, jugador_id: jugadorId },
           select: 'id',
@@ -529,7 +539,7 @@ export function PartidoLivePage() {
       const suplentes = todosLosCitados.filter(jId => !todosLosTitulares.includes(jId));
 
       for (const jugadorId of suplentes) {
-        const { data: participacion } = await restDirect<any>('participaciones_partido', {
+        const { data: participacion } = await restDirect<{ id: string }>('participaciones_partido', {
           method: 'GET',
           filters: { partido_id: id, jugador_id: jugadorId },
           select: 'id',
