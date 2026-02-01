@@ -1,4 +1,4 @@
-import { supabase, restDirect } from './supabase';
+import { restDirect } from './supabase';
 
 export interface Asignacion {
   id: string;
@@ -29,20 +29,14 @@ export interface PartidoSinAsignar {
 
 // Obtener partidos sin planillero asignado
 export async function getPartidosSinPlanillero(organizacionId: string): Promise<PartidoSinAsignar[]> {
-  // Obtener partidos programados
-  const { data: partidos, error } = await supabase
-    .from('partidos')
-    .select(`
-      id, fecha, hora, lugar,
-      equipo_local:equipos!equipo_local_id(id, nombre_corto),
-      equipo_visitante:equipos!equipo_visitante_id(id, nombre_corto),
-      torneo:torneos(nombre)
-    `)
-    .eq('organizacion_id', organizacionId)
-    .eq('estado', 'PROGRAMADO')
-    .is('planillero_id', null)
-    .order('fecha')
-    .order('hora');
+  // Obtener partidos programados sin planillero
+  const { data: partidos, error } = await restDirect<any[]>('partidos', {
+    method: 'GET',
+    select: 'id, fecha, hora, lugar, equipo_local:equipos!equipo_local_id(id, nombre_corto), equipo_visitante:equipos!equipo_visitante_id(id, nombre_corto), torneo:torneos(nombre)',
+    filters: { organizacion_id: organizacionId, estado: 'PROGRAMADO' },
+    rawFilters: ['planillero_id=is.null'],
+    order: { column: 'fecha', ascending: true },
+  });
 
   if (error) {
     console.error('Error fetching partidos:', error);
@@ -54,17 +48,12 @@ export async function getPartidosSinPlanillero(organizacionId: string): Promise<
 
 // Obtener asignaciones de un partido
 export async function getAsignacionesPartido(partidoId: string): Promise<Asignacion[]> {
-  const { data, error } = await supabase
-    .from('asignaciones_planillero')
-    .select(`
-      *,
-      usuario:usuarios(
-        id, nombre, apellido, email,
-        club:equipos(id, nombre, nombre_corto)
-      )
-    `)
-    .eq('partido_id', partidoId)
-    .order('created_at');
+  const { data, error } = await restDirect<Asignacion[]>('asignaciones_planillero', {
+    method: 'GET',
+    select: '*, usuario:usuarios(id, nombre, apellido, email, club:equipos(id, nombre, nombre_corto))',
+    filters: { partido_id: partidoId },
+    order: { column: 'created_at', ascending: true },
+  });
 
   if (error) {
     console.error('Error fetching asignaciones:', error);
@@ -76,16 +65,12 @@ export async function getAsignacionesPartido(partidoId: string): Promise<Asignac
 
 // Obtener usuarios disponibles para asignar (rol club)
 export async function getUsuariosDisponibles(organizacionId: string) {
-  const { data, error } = await supabase
-    .from('usuarios')
-    .select(`
-      id, nombre, apellido, email,
-      club:equipos(id, nombre, nombre_corto)
-    `)
-    .eq('organizacion_id', organizacionId)
-    .eq('rol', 'club')
-    .eq('activo', true)
-    .order('nombre');
+  const { data, error } = await restDirect<any[]>('usuarios', {
+    method: 'GET',
+    select: 'id, nombre, apellido, email, club:equipos(id, nombre, nombre_corto)',
+    filters: { organizacion_id: organizacionId, rol: 'club', activo: true },
+    order: { column: 'nombre', ascending: true },
+  });
 
   if (error) {
     console.error('Error fetching usuarios:', error);
@@ -103,12 +88,12 @@ export async function asignarPlanillero(
   notas?: string
 ): Promise<{ success: boolean; error: string | null }> {
   // Verificar si ya está asignado
-  const { data: existing } = await supabase
-    .from('asignaciones_planillero')
-    .select('id')
-    .eq('partido_id', partidoId)
-    .eq('usuario_id', usuarioId)
-    .single();
+  const { data: existing } = await restDirect<{ id: string }>('asignaciones_planillero', {
+    method: 'GET',
+    select: 'id',
+    filters: { partido_id: partidoId, usuario_id: usuarioId },
+    single: true,
+  });
 
   if (existing) {
     return { success: false, error: 'Este usuario ya está asignado a este partido' };
@@ -148,19 +133,18 @@ export async function quitarAsignacion(
   usuarioId: string
 ): Promise<{ success: boolean; error: string | null }> {
   // Obtener la asignación para saber el rol
-  const { data: asig } = await supabase
-    .from('asignaciones_planillero')
-    .select('rol')
-    .eq('partido_id', partidoId)
-    .eq('usuario_id', usuarioId)
-    .single();
+  const { data: asig } = await restDirect<{ rol: string }>('asignaciones_planillero', {
+    method: 'GET',
+    select: 'rol',
+    filters: { partido_id: partidoId, usuario_id: usuarioId },
+    single: true,
+  });
 
   // Eliminar asignación
-  const { error } = await supabase
-    .from('asignaciones_planillero')
-    .delete()
-    .eq('partido_id', partidoId)
-    .eq('usuario_id', usuarioId);
+  const { error } = await restDirect('asignaciones_planillero', {
+    method: 'DELETE',
+    filters: { partido_id: partidoId, usuario_id: usuarioId },
+  });
 
   if (error) {
     return { success: false, error: error.message };
@@ -180,10 +164,11 @@ export async function quitarAsignacion(
 
 // Confirmar asignación (el usuario acepta)
 export async function confirmarAsignacion(asignacionId: string): Promise<{ success: boolean; error: string | null }> {
-  const { error } = await supabase
-    .from('asignaciones_planillero')
-    .update({ confirmado: true })
-    .eq('id', asignacionId);
+  const { error } = await restDirect('asignaciones_planillero', {
+    method: 'PATCH',
+    filters: { id: asignacionId },
+    body: { confirmado: true },
+  });
 
   if (error) {
     return { success: false, error: error.message };
@@ -199,14 +184,12 @@ export async function autoAsignarClubLocal(
   organizacionId: string
 ): Promise<{ success: boolean; error: string | null }> {
   // Buscar usuario del club local
-  const { data: usuarios } = await supabase
-    .from('usuarios')
-    .select('id')
-    .eq('organizacion_id', organizacionId)
-    .eq('club_id', equipoLocalId)
-    .eq('rol', 'club')
-    .eq('activo', true)
-    .limit(1);
+  const { data: usuarios } = await restDirect<{ id: string }[]>('usuarios', {
+    method: 'GET',
+    select: 'id',
+    filters: { organizacion_id: organizacionId, club_id: equipoLocalId, rol: 'club', activo: true },
+    limit: 1,
+  });
 
   if (!usuarios || usuarios.length === 0) {
     return { success: false, error: 'No hay usuario activo para el club local' };
@@ -217,19 +200,12 @@ export async function autoAsignarClubLocal(
 
 // Obtener partidos asignados a un usuario
 export async function getMisPartidosAsignados(usuarioId: string) {
-  const { data, error } = await supabase
-    .from('asignaciones_planillero')
-    .select(`
-      id, rol, confirmado,
-      partido:partidos(
-        id, fecha, hora, estado, lugar,
-        equipo_local:equipos!equipo_local_id(nombre_corto),
-        equipo_visitante:equipos!equipo_visitante_id(nombre_corto),
-        torneo:torneos(nombre)
-      )
-    `)
-    .eq('usuario_id', usuarioId)
-    .order('created_at', { ascending: false });
+  const { data, error } = await restDirect<any[]>('asignaciones_planillero', {
+    method: 'GET',
+    select: 'id, rol, confirmado, partido:partidos(id, fecha, hora, estado, lugar, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre))',
+    filters: { usuario_id: usuarioId },
+    order: { column: 'created_at', ascending: false },
+  });
 
   if (error) {
     console.error('Error:', error);
@@ -243,15 +219,18 @@ export async function getMisPartidosAsignados(usuarioId: string) {
 export async function getEstadisticasAsignaciones(organizacionId: string) {
   const partidosSinAsignar = await getPartidosSinPlanillero(organizacionId);
 
-  const { count: totalProgramados } = await supabase
-    .from('partidos')
-    .select('id', { count: 'exact', head: true })
-    .eq('organizacion_id', organizacionId)
-    .eq('estado', 'PROGRAMADO');
+  // Obtener todos los partidos programados para contar
+  const { data: partidosProgramados } = await restDirect<{ id: string }[]>('partidos', {
+    method: 'GET',
+    select: 'id',
+    filters: { organizacion_id: organizacionId, estado: 'PROGRAMADO' },
+  });
+
+  const totalProgramados = partidosProgramados?.length || 0;
 
   return {
     sinAsignar: partidosSinAsignar.length,
-    totalProgramados: totalProgramados || 0,
-    asignados: (totalProgramados || 0) - partidosSinAsignar.length,
+    totalProgramados,
+    asignados: totalProgramados - partidosSinAsignar.length,
   };
 }
