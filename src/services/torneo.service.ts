@@ -1,4 +1,4 @@
-import { supabase, restDirect } from './supabase';
+import { restDirect } from './supabase';
 import type { EstadoTorneo } from '../types';
 
 export interface Torneo {
@@ -64,11 +64,12 @@ const DEFAULT_CONFIG: TorneoConfig = {
 
 // Obtener torneos de una organización
 export async function getTorneos(organizacionId: string): Promise<Torneo[]> {
-  const { data, error } = await supabase
-    .from('torneos')
-    .select('*')
-    .eq('organizacion_id', organizacionId)
-    .order('fecha_inicio', { ascending: false });
+  const { data, error } = await restDirect<Torneo[]>('torneos', {
+    method: 'GET',
+    select: '*',
+    filters: { organizacion_id: organizacionId },
+    order: { column: 'fecha_inicio', ascending: false },
+  });
 
   if (error) {
     console.error('Error fetching torneos:', error);
@@ -80,11 +81,12 @@ export async function getTorneos(organizacionId: string): Promise<Torneo[]> {
 
 // Obtener un torneo por ID
 export async function getTorneo(id: string): Promise<Torneo | null> {
-  const { data, error } = await supabase
-    .from('torneos')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const { data, error } = await restDirect<Torneo>('torneos', {
+    method: 'GET',
+    select: '*',
+    filters: { id },
+    single: true,
+  });
 
   if (error) {
     console.error('Error fetching torneo:', error);
@@ -100,19 +102,20 @@ export async function createTorneo(
   input: TorneoInput
 ): Promise<{ torneo: Torneo | null; error: string | null }> {
   // Verificar límite de torneos
-  const { data: org } = await supabase
-    .from('organizaciones')
-    .select('limite_torneos, torneos_count')
-    .eq('id', organizacionId)
-    .single();
+  const { data: org } = await restDirect<{ limite_torneos: number; torneos_count: number }>('organizaciones', {
+    method: 'GET',
+    select: 'limite_torneos, torneos_count',
+    filters: { id: organizacionId },
+    single: true,
+  });
 
   if (org && org.torneos_count >= org.limite_torneos) {
     return { torneo: null, error: `Límite de torneos alcanzado (${org.limite_torneos}). Contacte al administrador para ampliar su plan.` };
   }
 
-  const { data, error } = await supabase
-    .from('torneos')
-    .insert({
+  const { data, error } = await restDirect<Torneo[]>('torneos', {
+    method: 'POST',
+    body: {
       organizacion_id: organizacionId,
       nombre: input.nombre,
       tipo: input.tipo,
@@ -123,21 +126,23 @@ export async function createTorneo(
       fecha_fin: input.fecha_fin || null,
       descripcion: input.descripcion || null,
       config: { ...DEFAULT_CONFIG, ...input.config },
-    })
-    .select()
-    .single();
+    },
+  });
 
   if (error) {
     return { torneo: null, error: error.message };
   }
 
-  // Actualizar contador de torneos
-  await supabase
-    .from('organizaciones')
-    .update({ torneos_count: (org?.torneos_count || 0) + 1 })
-    .eq('id', organizacionId);
+  const torneo = Array.isArray(data) ? data[0] : data;
 
-  return { torneo: data, error: null };
+  // Actualizar contador de torneos
+  await restDirect('organizaciones', {
+    method: 'PATCH',
+    filters: { id: organizacionId },
+    body: { torneos_count: (org?.torneos_count || 0) + 1 },
+  });
+
+  return { torneo, error: null };
 }
 
 // Actualizar torneo
@@ -145,10 +150,11 @@ export async function updateTorneo(
   id: string,
   updates: Partial<TorneoInput & { estado: Torneo['estado'] }>
 ): Promise<{ success: boolean; error: string | null }> {
-  const { error } = await supabase
-    .from('torneos')
-    .update(updates)
-    .eq('id', id);
+  const { error } = await restDirect('torneos', {
+    method: 'PATCH',
+    filters: { id },
+    body: updates,
+  });
 
   if (error) {
     return { success: false, error: error.message };
@@ -160,18 +166,20 @@ export async function updateTorneo(
 // Eliminar torneo
 export async function deleteTorneo(id: string): Promise<{ success: boolean; error: string | null }> {
   // Obtener el torneo para saber la org
-  const { data: torneo } = await supabase
-    .from('torneos')
-    .select('organizacion_id')
-    .eq('id', id)
-    .single();
+  const { data: torneo } = await restDirect<{ organizacion_id: string }>('torneos', {
+    method: 'GET',
+    select: 'organizacion_id',
+    filters: { id },
+    single: true,
+  });
 
   // Verificar que no tenga partidos
-  const { data: partidos } = await supabase
-    .from('partidos')
-    .select('id')
-    .eq('torneo_id', id)
-    .limit(1);
+  const { data: partidos } = await restDirect<{ id: string }[]>('partidos', {
+    method: 'GET',
+    select: 'id',
+    filters: { torneo_id: id },
+    limit: 1,
+  });
 
   if (partidos && partidos.length > 0) {
     return { success: false, error: 'No se puede eliminar: tiene partidos asociados' };
@@ -188,10 +196,10 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
   }
 
   // Eliminar el torneo
-  const { error } = await supabase
-    .from('torneos')
-    .delete()
-    .eq('id', id);
+  const { error } = await restDirect('torneos', {
+    method: 'DELETE',
+    filters: { id },
+  });
 
   if (error) {
     return { success: false, error: error.message };
@@ -199,16 +207,18 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
 
   // Decrementar contador de torneos
   if (torneo?.organizacion_id) {
-    const { data: org } = await supabase
-      .from('organizaciones')
-      .select('torneos_count')
-      .eq('id', torneo.organizacion_id)
-      .single();
-    
-    await supabase
-      .from('organizaciones')
-      .update({ torneos_count: Math.max(0, (org?.torneos_count || 1) - 1) })
-      .eq('id', torneo.organizacion_id);
+    const { data: org } = await restDirect<{ torneos_count: number }>('organizaciones', {
+      method: 'GET',
+      select: 'torneos_count',
+      filters: { id: torneo.organizacion_id },
+      single: true,
+    });
+
+    await restDirect('organizaciones', {
+      method: 'PATCH',
+      filters: { id: torneo.organizacion_id },
+      body: { torneos_count: Math.max(0, (org?.torneos_count || 1) - 1) },
+    });
   }
 
   return { success: true, error: null };
@@ -216,14 +226,12 @@ export async function deleteTorneo(id: string): Promise<{ success: boolean; erro
 
 // Obtener equipos de un torneo
 export async function getTorneoEquipos(torneoId: string): Promise<TorneoEquipo[]> {
-  const { data, error } = await supabase
-    .from('torneo_equipos')
-    .select(`
-      *,
-      equipo:equipos(id, nombre, nombre_corto, logo_url)
-    `)
-    .eq('torneo_id', torneoId)
-    .order('grupo');
+  const { data, error } = await restDirect<TorneoEquipo[]>('torneo_equipos', {
+    method: 'GET',
+    select: '*, equipo:equipos(id, nombre, nombre_corto, logo_url)',
+    filters: { torneo_id: torneoId },
+    order: { column: 'grupo', ascending: true },
+  });
 
   if (error) {
     console.error('Error fetching torneo equipos:', error);
@@ -239,13 +247,14 @@ export async function addEquipoToTorneo(
   equipoId: string,
   grupo?: string
 ): Promise<{ success: boolean; error: string | null }> {
-  const { error } = await supabase
-    .from('torneo_equipos')
-    .insert({
+  const { error } = await restDirect('torneo_equipos', {
+    method: 'POST',
+    body: {
       torneo_id: torneoId,
       equipo_id: equipoId,
       grupo: grupo || null,
-    });
+    },
+  });
 
   if (error) {
     if (error.code === '23505') {
@@ -263,22 +272,22 @@ export async function removeEquipoFromTorneo(
   equipoId: string
 ): Promise<{ success: boolean; error: string | null }> {
   // Verificar que no tenga partidos
-  const { data: partidos } = await supabase
-    .from('partidos')
-    .select('id')
-    .eq('torneo_id', torneoId)
-    .or(`equipo_local_id.eq.${equipoId},equipo_visitante_id.eq.${equipoId}`)
-    .limit(1);
+  const { data: partidos } = await restDirect<{ id: string }[]>('partidos', {
+    method: 'GET',
+    select: 'id',
+    filters: { torneo_id: torneoId },
+    rawFilters: [`or=(equipo_local_id.eq.${equipoId},equipo_visitante_id.eq.${equipoId})`],
+    limit: 1,
+  });
 
   if (partidos && partidos.length > 0) {
     return { success: false, error: 'No se puede quitar: tiene partidos en el torneo' };
   }
 
-  const { error } = await supabase
-    .from('torneo_equipos')
-    .delete()
-    .eq('torneo_id', torneoId)
-    .eq('equipo_id', equipoId);
+  const { error } = await restDirect('torneo_equipos', {
+    method: 'DELETE',
+    filters: { torneo_id: torneoId, equipo_id: equipoId },
+  });
 
   if (error) {
     return { success: false, error: error.message };
@@ -377,16 +386,12 @@ export async function generarFixture(
 
 // Obtener partidos de un torneo
 export async function getPartidosTorneo(torneoId: string) {
-  const { data, error } = await supabase
-    .from('partidos')
-    .select(`
-      *,
-      equipo_local:equipos!equipo_local_id(id, nombre, nombre_corto, logo_url),
-      equipo_visitante:equipos!equipo_visitante_id(id, nombre, nombre_corto, logo_url)
-    `)
-    .eq('torneo_id', torneoId)
-    .order('fecha')
-    .order('hora');
+  const { data, error } = await restDirect<any[]>('partidos', {
+    method: 'GET',
+    select: '*, equipo_local:equipos!equipo_local_id(id, nombre, nombre_corto, logo_url), equipo_visitante:equipos!equipo_visitante_id(id, nombre, nombre_corto, logo_url)',
+    filters: { torneo_id: torneoId },
+    order: { column: 'fecha', ascending: true },
+  });
 
   if (error) {
     console.error('Error fetching partidos:', error);
@@ -411,10 +416,11 @@ async function syncEquiposFromPartidos(torneoId: string) {
   });
 
   // Verificar cuáles equipos ya están en torneo_equipos
-  const { data: existentes } = await supabase
-    .from('torneo_equipos')
-    .select('equipo_id')
-    .eq('torneo_id', torneoId);
+  const { data: existentes } = await restDirect<{ equipo_id: string }[]>('torneo_equipos', {
+    method: 'GET',
+    select: 'equipo_id',
+    filters: { torneo_id: torneoId },
+  });
 
   const existentesIds = new Set(existentes?.map((e: any) => e.equipo_id) || []);
 
@@ -423,15 +429,14 @@ async function syncEquiposFromPartidos(torneoId: string) {
 
   if (equiposNuevos.length > 0) {
     console.log(`🔄 Sincronizando ${equiposNuevos.length} equipos al torneo ${torneoId}`);
-    await supabase
-      .from('torneo_equipos')
-      .insert(
-        equiposNuevos.map(equipo_id => ({
-          torneo_id: torneoId,
-          equipo_id: equipo_id,
-          grupo: null
-        }))
-      );
+    await restDirect('torneo_equipos', {
+      method: 'POST',
+      body: equiposNuevos.map(equipo_id => ({
+        torneo_id: torneoId,
+        equipo_id: equipo_id,
+        grupo: null
+      })),
+    });
   }
 }
 
