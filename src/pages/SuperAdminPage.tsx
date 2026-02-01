@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
-import { 
-  getOrganizaciones, 
-  createOrganizacion, 
-  updateOrganizacion, 
+import {
+  getOrganizaciones,
+  createOrganizacion,
+  updateOrganizacion,
   deleteOrganizacion,
   getOrganizacionStats,
   getUsuariosOrganizacion,
   PLANES,
-  type Organizacion 
+  type Organizacion
 } from '../services/organizacion.service';
 import { restDirect } from '../services/supabase';
+import { useRefreshOnVisible } from '../contexts/VisibilityContext';
 
 type Tab = 'organizaciones' | 'stats';
 
@@ -72,6 +73,14 @@ export default function SuperAdminPage() {
     return unsubscribe;
   }, []);
 
+  // Función para cargar datos (memoizada para useRefreshOnVisible)
+  const loadOrganizaciones = useCallback(async () => {
+    setLoading(true);
+    const orgs = await getOrganizaciones();
+    setOrganizaciones(orgs);
+    setLoading(false);
+  }, []);
+
   // Cargar datos cuando usuario esté listo
   useEffect(() => {
     if (!user) {
@@ -86,14 +95,10 @@ export default function SuperAdminPage() {
       loadOrganizaciones();
       setDataLoaded(true);
     }
-  }, [user, navigate, dataLoaded]);
+  }, [user, navigate, dataLoaded, loadOrganizaciones]);
 
-  const loadOrganizaciones = async () => {
-    setLoading(true);
-    const orgs = await getOrganizaciones();
-    setOrganizaciones(orgs);
-    setLoading(false);
-  };
+  // Recargar datos cuando la app vuelve a ser visible (sin remontar componente)
+  useRefreshOnVisible(loadOrganizaciones, [loadOrganizaciones]);
 
   const handleLogout = async () => {
     await logout();

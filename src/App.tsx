@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from './components/common/Layout';
 import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
@@ -9,6 +9,7 @@ import { MarcadorPublicoPage } from './pages/MarcadorPublicoPage';
 import { PublicDashboardPage } from './pages/PublicDashboardPage';
 import { InstallPWA } from './components/common/InstallPWA';
 import { UpdatePrompt } from './components/common/UpdatePrompt';
+import { VisibilityProvider } from './contexts/VisibilityContext';
 import LoginPage from './pages/LoginPage';
 import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
@@ -18,17 +19,14 @@ import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services
 function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<Usuario | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0); // Fuerza re-mount de componentes después de minimize
-  const minimizedTimeRef = useRef<number>(0);
 
   useEffect(() => {
-    let isMounted = true; // 🛡️ Protección contra actualizaciones en componentes desmontados
+    let isMounted = true;
 
     const init = async () => {
       try {
         await initAuth();
         const currentUser = getCurrentUser();
-        // Solo actualizamos el estado si el componente sigue montado
         if (isMounted) {
           setUser(currentUser);
           setLoading(false);
@@ -41,14 +39,12 @@ function App() {
 
     init();
 
-    // Escuchar cambios de sesión
     const unsubscribe = onAuthChange((u) => {
       if (isMounted) {
         setUser(u);
       }
     });
 
-    // Cleanup robusto
     return () => {
       isMounted = false;
       if (typeof unsubscribe === 'function') {
@@ -56,31 +52,6 @@ function App() {
       }
     };
   }, []);
-
-  // Forzar re-mount de componentes cuando se maximiza después de minimize
-  // Esto hace que los componentes re-fetch sus datos usando restDirect()
-  // que siempre funciona (el cliente Supabase puede quedar congelado)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        minimizedTimeRef.current = Date.now();
-        console.log('🔽 [App] App minimizada');
-      } else {
-        const timeMinimized = (Date.now() - minimizedTimeRef.current) / 1000;
-        console.log(`🔼 [App] App maximizada después de ${timeMinimized.toFixed(0)}s`);
-
-        // Siempre forzar refresh cuando hay usuario logueado
-        // Los componentes usan restDirect() que no se congela
-        if (user) {
-          console.log('🔄 [App] Refrescando componentes...');
-          setRefreshKey(k => k + 1);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user]);
 
   if (loading) {
     return (
@@ -91,50 +62,52 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes key={refreshKey}>
-        {/* Rutas de autenticación */}
-        <Route path="/login" element={<LoginPage />} />
-        
-        {/* Panel SuperAdmin */}
-        <Route path="/superadmin" element={
-          user?.rol === 'superadmin' ? <SuperAdminPage /> : <Navigate to="/login" />
-        } />
-        
-        {/* Panel Admin por organización */}
-        <Route path="/:orgSlug" element={
-          user?.rol === 'admin' || user?.rol === 'superadmin' ? <AdminPage /> : <Navigate to="/login" />
-        } />
-        
-        {/* Panel Club */}
-        <Route path="/:orgSlug/mi-club" element={
-          user?.rol === 'club' ? <ClubPage /> : <Navigate to="/login" />
-        } />
-        
-        {/* Rutas de partido dentro de organización */}
-        <Route path="/:orgSlug/partido/:id/live" element={<PartidoLivePage />} />
-        <Route path="/:orgSlug/partido/:id" element={<MarcadorPublicoPage />} />
-        <Route path="/:orgSlug/partidos" element={<PartidosPage />} />
+    <VisibilityProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Rutas de autenticación */}
+          <Route path="/login" element={<LoginPage />} />
 
-        {/* Dashboard público por organización */}
-        <Route path="/:orgSlug/public" element={<PublicDashboardPage />} />
+          {/* Panel SuperAdmin */}
+          <Route path="/superadmin" element={
+            user?.rol === 'superadmin' ? <SuperAdminPage /> : <Navigate to="/login" />
+          } />
 
-        {/* Rutas públicas legacy (sin org) */}
-        <Route path="/" element={<Layout />}>
-          <Route index element={<HomePage />} />
-          <Route path="posiciones" element={<PosicionesPage />} />
-          <Route path="partidos" element={<PartidosPage />} />
-        </Route>
-        <Route path="/partido/:id/live" element={<PartidoLivePage />} />
-        <Route path="/partido/:id" element={<MarcadorPublicoPage />} />
-      </Routes>
-      
-      {/* Banner de instalación PWA */}
-      <InstallPWA />
-      
-      {/* Notificación de actualización */}
-      <UpdatePrompt />
-    </BrowserRouter>
+          {/* Panel Admin por organización */}
+          <Route path="/:orgSlug" element={
+            user?.rol === 'admin' || user?.rol === 'superadmin' ? <AdminPage /> : <Navigate to="/login" />
+          } />
+
+          {/* Panel Club */}
+          <Route path="/:orgSlug/mi-club" element={
+            user?.rol === 'club' ? <ClubPage /> : <Navigate to="/login" />
+          } />
+
+          {/* Rutas de partido dentro de organización */}
+          <Route path="/:orgSlug/partido/:id/live" element={<PartidoLivePage />} />
+          <Route path="/:orgSlug/partido/:id" element={<MarcadorPublicoPage />} />
+          <Route path="/:orgSlug/partidos" element={<PartidosPage />} />
+
+          {/* Dashboard público por organización */}
+          <Route path="/:orgSlug/public" element={<PublicDashboardPage />} />
+
+          {/* Rutas públicas legacy (sin org) */}
+          <Route path="/" element={<Layout />}>
+            <Route index element={<HomePage />} />
+            <Route path="posiciones" element={<PosicionesPage />} />
+            <Route path="partidos" element={<PartidosPage />} />
+          </Route>
+          <Route path="/partido/:id/live" element={<PartidoLivePage />} />
+          <Route path="/partido/:id" element={<MarcadorPublicoPage />} />
+        </Routes>
+
+        {/* Banner de instalación PWA */}
+        <InstallPWA />
+
+        {/* Notificación de actualización */}
+        <UpdatePrompt />
+      </BrowserRouter>
+    </VisibilityProvider>
   );
 }
 

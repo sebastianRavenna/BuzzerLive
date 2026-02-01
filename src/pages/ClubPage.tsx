@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
 import { restDirect } from '../services/supabase';
+import { useRefreshOnVisible } from '../contexts/VisibilityContext';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
 
@@ -100,24 +101,8 @@ export default function ClubPage() {
     return unsubscribe;
   }, []);
 
-  // Cargar datos cuando usuario esté listo
-  useEffect(() => {
-    if (!user) {
-      setLoading(true);
-      return;
-    }
-    if (user.rol !== 'club') {
-      navigate('/login');
-      return;
-    }
-    if (!user.club_id) {
-      navigate('/login');
-      return;
-    }
-    loadData();
-  }, [user, navigate]);
-
-  const loadData = async () => {
+  // Función para cargar datos (memoizada para useRefreshOnVisible)
+  const loadData = useCallback(async () => {
     if (!user?.club_id || !user?.organizacion_id) return;
     setLoading(true);
 
@@ -155,7 +140,27 @@ export default function ClubPage() {
     setEntrenadores(entrenadoresRes.data || []);
     setPartidos(partidosRes.data || []);
     setLoading(false);
-  };
+  }, [user?.club_id, user?.organizacion_id]);
+
+  // Cargar datos cuando usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'club') {
+      navigate('/login');
+      return;
+    }
+    if (!user.club_id) {
+      navigate('/login');
+      return;
+    }
+    loadData();
+  }, [user, navigate, loadData]);
+
+  // Recargar datos cuando la app vuelve a ser visible (sin remontar componente)
+  useRefreshOnVisible(loadData, [loadData]);
 
   const handleLogout = async () => {
     await logout();

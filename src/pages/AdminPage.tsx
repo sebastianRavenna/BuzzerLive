@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
+import { useRefreshOnVisible } from '../contexts/VisibilityContext';
 import { restDirect } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
 import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
@@ -82,25 +83,8 @@ export default function AdminPage() {
     return unsubscribe;
   }, []);
 
-  // Cargar datos cuando el usuario esté listo
-  useEffect(() => {
-    if (!user) {
-      setLoading(true);
-      return;
-    }
-    if (user.rol !== 'admin' && user.rol !== 'superadmin') {
-      navigate('/login');
-      return;
-    }
-    if (user.rol === 'admin' && user.organizacion?.slug !== orgSlug) {
-      navigate(`/${user.organizacion?.slug}`);
-      return;
-    }
-    // Siempre recargar datos cuando user cambie
-    loadData();
-  }, [user, orgSlug]);
-
-  const loadData = async () => {
+  // Función para cargar datos (memoizada para useRefreshOnVisible)
+  const loadData = useCallback(async () => {
     if (!user?.organizacion_id) return;
     setLoading(true);
     const orgId = user.organizacion_id;
@@ -145,7 +129,27 @@ export default function AdminPage() {
     setPartidosSinAsignar(sinAsignar);
     setUsuariosDisponibles(disponibles);
     setLoading(false);
-  };
+  }, [user?.organizacion_id]);
+
+  // Cargar datos cuando el usuario esté listo
+  useEffect(() => {
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+    if (user.rol !== 'admin' && user.rol !== 'superadmin') {
+      navigate('/login');
+      return;
+    }
+    if (user.rol === 'admin' && user.organizacion?.slug !== orgSlug) {
+      navigate(`/${user.organizacion?.slug}`);
+      return;
+    }
+    loadData();
+  }, [user, orgSlug, loadData]);
+
+  // Recargar datos cuando la app vuelve a ser visible (sin remontar componente)
+  useRefreshOnVisible(loadData, [loadData]);
 
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
