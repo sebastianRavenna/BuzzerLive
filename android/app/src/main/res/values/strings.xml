@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BuzzerLive</string>
+    <string name="title_activity_main">BuzzerLive</string>
+    <string name="package_name">com.buzzerlive.app</string>
+    <string name="custom_url_scheme">com.buzzerlive.app</string>
+</resources>
