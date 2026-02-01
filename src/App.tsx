@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { Layout } from './components/common/Layout';
 import { HomePage } from './pages/HomePage';
 import { PosicionesPage } from './pages/PosicionesPage';
@@ -15,6 +17,12 @@ import SuperAdminPage from './pages/SuperAdminPage';
 import AdminPage from './pages/AdminPage';
 import ClubPage from './pages/ClubPage';
 import { initAuth, getCurrentUser, onAuthChange, type Usuario } from './services/auth.service';
+
+// Configurar StatusBar en app nativa
+if (Capacitor.isNativePlatform()) {
+  StatusBar.setStyle({ style: Style.Dark });
+  StatusBar.setBackgroundColor({ color: '#111827' });
+}
 
 function App() {
   const [loading, setLoading] = useState(true);

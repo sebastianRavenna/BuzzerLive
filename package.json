@@ -7,12 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android:sync": "npm run build && npx cap sync",
+    "android:open": "npm run android:sync && npx cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.2",
     "@capacitor/cli": "^8.0.2",
     "@capacitor/core": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.0",
     "@supabase/supabase-js": "^2.90.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
