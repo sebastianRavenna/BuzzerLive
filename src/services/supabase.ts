@@ -104,6 +104,7 @@ export async function restDirect<T = any>(
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     body?: any;
     filters?: Record<string, any>;
+    rawFilters?: string[]; // Filtros raw como ['or=(col1.eq.val1,col2.eq.val2)']
     select?: string;
     single?: boolean;
     order?: { column: string; ascending?: boolean };
@@ -129,6 +130,14 @@ export async function restDirect<T = any>(
     if (options.filters) {
       for (const [key, value] of Object.entries(options.filters)) {
         searchParams.append(key, `eq.${value}`);
+      }
+    }
+
+    // Soporte para filtros raw (OR, gt, lt, etc.)
+    if (options.rawFilters) {
+      for (const filter of options.rawFilters) {
+        const [key, ...rest] = filter.split('=');
+        searchParams.append(key, rest.join('='));
       }
     }
 

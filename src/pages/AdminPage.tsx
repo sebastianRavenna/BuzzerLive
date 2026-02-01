@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, createAuthUser, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
-import { supabase, restDirect } from '../services/supabase';
+import { restDirect } from '../services/supabase';
 import { getTorneos, createTorneo, updateTorneo, deleteTorneo, getTorneoEquipos, addEquipoToTorneo, removeEquipoFromTorneo, generarFixture, getTablaPosiciones, CATEGORIAS, TIPOS_TORNEO, type Torneo, type TorneoEquipo } from '../services/torneo.service';
 import { getPartidosSinPlanillero, getUsuariosDisponibles, asignarPlanillero, quitarAsignacion, getAsignacionesPartido, type PartidoSinAsignar } from '../services/asignacion.service';
 import { uploadClubLogo, uploadJugadorFoto, uploadJugadorCertificado } from '../services/storage.service';
@@ -104,16 +104,46 @@ export default function AdminPage() {
     if (!user?.organizacion_id) return;
     setLoading(true);
     const orgId = user.organizacion_id;
+
+    // Usar restDirect en lugar de supabase.from() para evitar congelamiento después de minimize
     const [torneosData, clubesRes, jugadoresRes, partidosRes, usuariosRes, sinAsignar, disponibles] = await Promise.all([
       getTorneos(orgId),
-      supabase.from('equipos').select('*').eq('organizacion_id', orgId).order('nombre'),
-      supabase.from('jugadores').select('*, equipo:equipos(nombre_corto)').eq('organizacion_id', orgId).order('apellido'),
-      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre)').eq('organizacion_id', orgId).order('fecha', { ascending: false }).limit(100),
-      supabase.from('usuarios').select('*, club:equipos(nombre_corto)').eq('organizacion_id', orgId).order('nombre'),
+      restDirect<ClubLocal[]>('equipos', {
+        method: 'GET',
+        select: '*',
+        filters: { organizacion_id: orgId },
+        order: { column: 'nombre', ascending: true },
+      }),
+      restDirect<JugadorLocal[]>('jugadores', {
+        method: 'GET',
+        select: '*, equipo:equipos(nombre_corto)',
+        filters: { organizacion_id: orgId },
+        order: { column: 'apellido', ascending: true },
+      }),
+      restDirect<PartidoLocal[]>('partidos', {
+        method: 'GET',
+        select: '*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto), torneo:torneos(nombre)',
+        filters: { organizacion_id: orgId },
+        order: { column: 'fecha', ascending: false },
+        limit: 100,
+      }),
+      restDirect<UsuarioLocal[]>('usuarios', {
+        method: 'GET',
+        select: '*, club:equipos(nombre_corto)',
+        filters: { organizacion_id: orgId },
+        order: { column: 'nombre', ascending: true },
+      }),
       getPartidosSinPlanillero(orgId),
       getUsuariosDisponibles(orgId),
     ]);
-    setTorneos(torneosData); setClubes(clubesRes.data || []); setJugadores(jugadoresRes.data || []); setPartidos(partidosRes.data || []); setUsuarios(usuariosRes.data || []); setPartidosSinAsignar(sinAsignar); setUsuariosDisponibles(disponibles);
+
+    setTorneos(torneosData);
+    setClubes(clubesRes.data || []);
+    setJugadores(jugadoresRes.data || []);
+    setPartidos(partidosRes.data || []);
+    setUsuarios(usuariosRes.data || []);
+    setPartidosSinAsignar(sinAsignar);
+    setUsuariosDisponibles(disponibles);
     setLoading(false);
   };
 

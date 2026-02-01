@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { restDirect, isSupabaseConfigured } from '../services/supabase';
 import { reanudarPartido } from '../services/partido.service';
 import type { MarcadorPartido } from '../types';
 
@@ -40,22 +40,25 @@ export function PartidosPage() {
     }
     
     async function fetchPartidos() {
-      let query = supabase
-        .from('marcador_partido')
-        .select('*');
-      
+      // Usar restDirect en lugar de supabase.from() para evitar congelamiento después de minimize
+      const filters: Record<string, string> = {};
       if (filtro === 'en_curso') {
-        query = query.eq('estado', 'EN_CURSO');
+        filters.estado = 'EN_CURSO';
       } else if (filtro === 'programados') {
-        query = query.eq('estado', 'PROGRAMADO');
+        filters.estado = 'PROGRAMADO';
       } else if (filtro === 'finalizados') {
-        query = query.eq('estado', 'FINALIZADO');
+        filters.estado = 'FINALIZADO';
       }
-      
-      const { data, error } = await query.limit(50);
-      
-      if (error) {
-        setError(error.message);
+
+      const { data, error: fetchError } = await restDirect<MarcadorPartido[]>('marcador_partido', {
+        method: 'GET',
+        select: '*',
+        filters: Object.keys(filters).length > 0 ? filters : undefined,
+        limit: 50,
+      });
+
+      if (fetchError) {
+        setError(fetchError.message);
       } else if (data) {
         // Ordenar partidos: EN_CURSO primero, luego SUSPENDIDOS/PROGRAMADOS (más próximo primero), luego FINALIZADOS (más reciente primero)
         const ordenados = [...data].sort((a, b) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, restDirect } from '../services/supabase';
+import { restDirect } from '../services/supabase';
 import { 
   getPartidoCompleto, 
   iniciarPartido, 
@@ -163,6 +163,26 @@ export function PartidoLivePage() {
               setFase('seleccion-titulares');
             }
           } else if (data.partido.estado === 'EN_CURSO') {
+            // Recuperar citados desde participaciones (los que tienen participo = true)
+            const citadosLocalIds = data.jugadoresLocal
+              .filter(j => j.participo)
+              .map(j => j.id);
+            const citadosVisitanteIds = data.jugadoresVisitante
+              .filter(j => j.participo)
+              .map(j => j.id);
+
+            // Si no hay participaciones (caso raro), usar primeros 12 como fallback
+            if (citadosLocalIds.length > 0) {
+              setCitadosLocal(new Set(citadosLocalIds));
+            } else {
+              setCitadosLocal(new Set(data.jugadoresLocal.slice(0, 12).map(j => j.id)));
+            }
+            if (citadosVisitanteIds.length > 0) {
+              setCitadosVisitante(new Set(citadosVisitanteIds));
+            } else {
+              setCitadosVisitante(new Set(data.jugadoresVisitante.slice(0, 12).map(j => j.id)));
+            }
+
             // Función auxiliar para recuperar titulares
             const obtenerTitulares = (jugadores: JugadorEnPartido[]) => {
               const titulares = jugadores.filter(j => j.es_titular);
@@ -177,11 +197,17 @@ export function PartidoLivePage() {
               return ids;
             };
 
-            setCitadosLocal(new Set(data.jugadoresLocal.slice(0, 12).map(j => j.id)));
-            setCitadosVisitante(new Set(data.jugadoresVisitante.slice(0, 12).map(j => j.id)));
             setTitularesLocal(obtenerTitulares(data.jugadoresLocal));
             setTitularesVisitante(obtenerTitulares(data.jugadoresVisitante));
             setFase('en-juego');
+
+            // Restaurar entrenadores seleccionados desde el partido
+            if (data.partido.entrenador_local_id) {
+              setEntrenadoresSeleccionadosLocal(new Set([data.partido.entrenador_local_id]));
+            }
+            if (data.partido.entrenador_visitante_id) {
+              setEntrenadoresSeleccionadosVisitante(new Set([data.partido.entrenador_visitante_id]));
+            }
           } else {
             setFase('finalizado');
           }
@@ -205,12 +231,12 @@ export function PartidoLivePage() {
 
     async function cargarFaltasEntrenador() {
       try {
-        const { data: acciones } = await supabase
-          .from('acciones')
-          .select('equipo_id, tipo')
-          .eq('partido_id', id)
-          .eq('anulada', false)
-          .in('tipo', ['FALTA_TECNICA_ENTRENADOR', 'FALTA_TECNICA_BANCO', 'FALTA_DESCALIFICANTE_ENTRENADOR']);
+        const { data: acciones } = await restDirect<{ equipo_id: string; tipo: string }[]>('acciones', {
+          method: 'GET',
+          select: 'equipo_id, tipo',
+          filters: { partido_id: id, anulada: false },
+          rawFilters: ['tipo=in.(FALTA_TECNICA_ENTRENADOR,FALTA_TECNICA_BANCO,FALTA_DESCALIFICANTE_ENTRENADOR)'],
+        });
 
         if (acciones && isMounted) {
           const faltasLocal = acciones.filter(a => a.equipo_id === equipoLocal!.id);
@@ -500,10 +526,11 @@ export function PartidoLivePage() {
         if (entrenadorLocalId) updates.entrenador_local_id = entrenadorLocalId;
         if (entrenadorVisitanteId) updates.entrenador_visitante_id = entrenadorVisitanteId;
 
-        await supabase
-          .from('partidos')
-          .update(updates)
-          .eq('id', id);
+        await restDirect('partidos', {
+          method: 'PATCH',
+          filters: { id: id },
+          body: updates
+        });
       }
 
       // CRÍTICO: Actualizar es_titular para los jugadores seleccionados
@@ -513,7 +540,14 @@ export function PartidoLivePage() {
         ...Array.from(titularesVisitante)
       ];
 
-      // Marcar titulares como es_titular = true (usando GET primero para obtener ID)
+      // CRÍTICO: Marcar TODOS los citados con participo: true
+      // Esto es necesario para restaurar los citados al refrescar la página
+      const todosLosCitados = [
+        ...Array.from(citadosLocal),
+        ...Array.from(citadosVisitante)
+      ];
+
+      // Marcar titulares como es_titular = true Y participo = true
       for (const jugadorId of todosLosTitulares) {
         const { data: participacion } = await restDirect<{ id: string }>('participaciones_partido', {
           method: 'GET',
@@ -526,16 +560,12 @@ export function PartidoLivePage() {
           await restDirect('participaciones_partido', {
             method: 'PATCH',
             filters: { id: participacion.id },
-            body: { es_titular: true, updated_at: new Date().toISOString() }
+            body: { es_titular: true, participo: true, updated_at: new Date().toISOString() }
           });
         }
       }
 
-      // Marcar suplentes como es_titular = false
-      const todosLosCitados = [
-        ...Array.from(citadosLocal),
-        ...Array.from(citadosVisitante)
-      ];
+      // Marcar suplentes (citados que no son titulares) como es_titular = false Y participo = true
       const suplentes = todosLosCitados.filter(jId => !todosLosTitulares.includes(jId));
 
       for (const jugadorId of suplentes) {
@@ -550,7 +580,7 @@ export function PartidoLivePage() {
           await restDirect('participaciones_partido', {
             method: 'PATCH',
             filters: { id: participacion.id },
-            body: { es_titular: false, updated_at: new Date().toISOString() }
+            body: { es_titular: false, participo: true, updated_at: new Date().toISOString() }
           });
         }
       }

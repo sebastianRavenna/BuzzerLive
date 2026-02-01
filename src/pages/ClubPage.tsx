@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCurrentUser, logout, onAuthChange, type Usuario as AuthUsuario } from '../services/auth.service';
-import { supabase, restDirect } from '../services/supabase';
+import { restDirect } from '../services/supabase';
 
 type Tab = 'info' | 'jugadores' | 'entrenadores' | 'partidos';
 
@@ -120,16 +120,36 @@ export default function ClubPage() {
   const loadData = async () => {
     if (!user?.club_id || !user?.organizacion_id) return;
     setLoading(true);
-    
+
+    // Usar restDirect en lugar de supabase.from() para evitar congelamiento después de minimize
     const [clubRes, jugadoresRes, entrenadoresRes, partidosRes] = await Promise.all([
-      supabase.from('equipos').select('*').eq('id', user.club_id).single(),
-      supabase.from('jugadores').select('*').eq('equipo_id', user.club_id).order('numero_camiseta'),
-      supabase.from('entrenadores').select('*').eq('equipo_id', user.club_id).order('rol'),
-      supabase.from('partidos').select('*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto)')
-        .or(`equipo_local_id.eq.${user.club_id},equipo_visitante_id.eq.${user.club_id}`)
-        .order('fecha', { ascending: false }).limit(20),
+      restDirect<Club>('equipos', {
+        method: 'GET',
+        select: '*',
+        filters: { id: user.club_id },
+        single: true,
+      }),
+      restDirect<Jugador[]>('jugadores', {
+        method: 'GET',
+        select: '*',
+        filters: { equipo_id: user.club_id },
+        order: { column: 'numero_camiseta', ascending: true },
+      }),
+      restDirect<Entrenador[]>('entrenadores', {
+        method: 'GET',
+        select: '*',
+        filters: { equipo_id: user.club_id },
+        order: { column: 'rol', ascending: true },
+      }),
+      restDirect<Partido[]>('partidos', {
+        method: 'GET',
+        select: '*, equipo_local:equipos!equipo_local_id(nombre_corto), equipo_visitante:equipos!equipo_visitante_id(nombre_corto)',
+        rawFilters: [`or=(equipo_local_id.eq.${user.club_id},equipo_visitante_id.eq.${user.club_id})`],
+        order: { column: 'fecha', ascending: false },
+        limit: 20,
+      }),
     ]);
-    
+
     setClub(clubRes.data);
     setJugadores(jugadoresRes.data || []);
     setEntrenadores(entrenadoresRes.data || []);
